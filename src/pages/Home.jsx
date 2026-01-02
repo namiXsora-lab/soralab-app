@@ -72,11 +72,11 @@ export default function Home() {
 
           <span className="sl-dot">•</span>
 
-          <a className="sl-link" href="#" onClick={(e) => e.preventDefault()}>
+          <a className="sl-link" href="/refund">
             返金・キャンセルについて
           </a>
           <span className="sl-dot">•</span>
-          <a className="sl-link" href="#" onClick={(e) => e.preventDefault()}>
+          <a className="sl-link" href="/contact">
             お問い合わせ
           </a>
         </footer>
