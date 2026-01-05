@@ -1,0 +1,10 @@
+{
+  "resourceName": "subscriptions",
+  "tableName": "Subscriptions",
+  "partitionKey": {
+    "fieldName": "userSub",
+    "fieldType": "string"
+  },
+  "gsi": [],
+  "triggerFunctions": []
+}

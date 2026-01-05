@@ -9,11 +9,24 @@
       "UnauthRoleName": "amplify-soralabapp-dev-0c741-unauthRole",
       "StackName": "amplify-soralabapp-dev-0c741",
       "StackId": "arn:aws:cloudformation:ap-northeast-1:394504785225:stack/amplify-soralabapp-dev-0c741/72292830-e9f3-11f0-90c4-0aeb3dc90c3b",
-      "AmplifyAppId": "d39ketzz56zc73"
+      "AmplifyAppId": "d39ketzz56zc73",
+      "APIGatewayAuthURL": "https://s3.amazonaws.com/amplify-soralabapp-dev-0c741-deployment/amplify-cfn-templates/api/APIGatewayAuthStack.json"
     },
     "categories": {
       "auth": {
         "soralabapp59b4b4e6": {}
+      },
+      "function": {
+        "billingApi": {
+          "deploymentBucketName": "amplify-soralabapp-dev-0c741-deployment",
+          "s3Key": "amplify-builds/billingApi-6e59497248414b31384a-build.zip"
+        }
+      },
+      "storage": {
+        "subscriptions": {}
+      },
+      "api": {
+        "billingApi": {}
       }
     }
   }

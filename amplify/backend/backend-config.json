@@ -1,4 +1,20 @@
 {
+  "api": {
+    "billingApi": {
+      "dependsOn": [
+        {
+          "attributes": [
+            "Name",
+            "Arn"
+          ],
+          "category": "function",
+          "resourceName": "billingApi"
+        }
+      ],
+      "providerPlugin": "awscloudformation",
+      "service": "API Gateway"
+    }
+  },
   "auth": {
     "soralabapp59b4b4e6": {
       "customAuth": false,
@@ -25,6 +41,37 @@
       },
       "providerPlugin": "awscloudformation",
       "service": "Cognito"
+    }
+  },
+  "function": {
+    "billingApi": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
+    }
+  },
+  "parameters": {
+    "AMPLIFY_function_billingApi_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "billingApi"
+        }
+      ]
+    },
+    "AMPLIFY_function_billingApi_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "billingApi"
+        }
+      ]
+    }
+  },
+  "storage": {
+    "subscriptions": {
+      "providerPlugin": "awscloudformation",
+      "service": "DynamoDB"
     }
   }
 }

@@ -1,24 +1,63 @@
+import { useEffect, useState } from "react";
+import MainFormApp from "./MainFormApp"; // あなたの構成のままでOK
+import { getSubscription } from "../api/subscription";
+import { signOut } from "aws-amplify/auth";
 import { useNavigate } from "react-router-dom";
-import { mockLogout } from "../auth/mockAuth";
-import MainFormApp from "./MainFormApp"; // 実際のimportに合わせて
 
 export default function FormCompare() {
   const navigate = useNavigate();
 
+  const [loading, setLoading] = useState(true);
+  const [sub, setSub] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await getSubscription();
+        setSub(s);
+      } catch (e) {
+        setErr(e?.message || "契約状況の取得に失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const logout = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
+
+  if (loading) return <div style={{ padding: 24 }}>契約状況を確認中...</div>;
+  if (err) return <div style={{ padding: 24, color: "crimson" }}>{err}</div>;
+
+  // いまはLambdaが isSubscribed: true を返す想定（後でStripe連携で本物にする）
+  if (!sub?.isSubscribed) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h2>有料プランが必要です</h2>
+        <p>月額¥500のサブスクに登録すると利用できます。</p>
+
+        <button onClick={() => navigate("/", { replace: true })}>
+          トップへ戻る
+        </button>
+
+        <div style={{ marginTop: 12 }}>
+          <button onClick={logout}>ログアウト</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ padding: 8 }}>
-        <button
-          onClick={() => {
-            mockLogout();
-            navigate("/login", { replace: true });
-          }}
-        >
-          仮ログアウト
-        </button>
+        <button onClick={logout}>ログアウト</button>
       </div>
 
       <MainFormApp />
     </div>
   );
 }
+

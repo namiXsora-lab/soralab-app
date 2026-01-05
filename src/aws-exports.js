@@ -25,6 +25,20 @@ const awsmobile = {
     },
     "aws_cognito_verification_mechanisms": [
         "EMAIL"
+    ],
+    "aws_dynamodb_all_tables_region": "ap-northeast-1",
+    "aws_dynamodb_table_schemas": [
+        {
+            "tableName": "Subscriptions-dev",
+            "region": "ap-northeast-1"
+        }
+    ],
+    "aws_cloud_logic_custom": [
+        {
+            "name": "billingApi",
+            "endpoint": "https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev",
+            "region": "ap-northeast-1"
+        }
     ]
 };
 

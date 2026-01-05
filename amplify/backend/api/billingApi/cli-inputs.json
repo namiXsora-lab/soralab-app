@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "paths": {
+    "/subscription": {
+      "name": "/subscription",
+      "lambdaFunction": "billingApi",
+      "permissions": {
+        "setting": "private",
+        "auth": [
+          "read"
+        ]
+      }
+    }
+  }
+}
