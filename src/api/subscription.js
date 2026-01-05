@@ -1,15 +1,11 @@
 import { get } from "aws-amplify/api";
-import { fetchAuthSession } from "aws-amplify/auth";
 
 export async function getSubscription() {
-  const session = await fetchAuthSession();
-  const token = session.tokens?.idToken?.toString();
-
   const resp = await get({
-    apiName: "billingApi",      // aws-exports.js の name と一致させる
+    apiName: "billingApi",      // aws-exports.js の aws_cloud_logic_custom.name と一致
     path: "/subscription",
     options: {
-      headers: token ? { Authorization: token } : {},
+      authMode: "userPool",     // ← ここ重要
     },
   }).response;
 
