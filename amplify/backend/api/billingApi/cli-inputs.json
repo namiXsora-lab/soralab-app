@@ -10,6 +10,13 @@
           "read"
         ]
       }
+    },
+    "/checkout": {
+      "name": "/checkout",
+      "lambdaFunction": "billingApi",
+      "permissions": {
+        "setting": "open"
+      }
     }
   }
 }

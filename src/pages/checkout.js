@@ -1,12 +1,24 @@
 // src/checkout.js
+import { fetchAuthSession } from "aws-amplify/auth";
 
 const CHECKOUT_URL =
   "https://iap7rjj3eccm26idib5qbjhfhu0tcfdd.lambda-url.ap-northeast-1.on.aws/";
 
 export async function goToCheckout() {
   try {
-    // ★ とりあえず GET、ヘッダーも付けない → preflight が飛ばない
-    const res = await fetch(CHECKOUT_URL, {
+    // ★ Cognitoのセッション取得
+    const session = await fetchAuthSession();
+    const userSub = session.tokens?.idToken?.payload?.sub;
+
+    if (!userSub) {
+      alert("ログイン情報が取得できません。再ログインしてください。");
+      return;
+    }
+
+    // ★ userSub をクエリに付与
+    const url = `${CHECKOUT_URL}?userSub=${encodeURIComponent(userSub)}`;
+
+    const res = await fetch(url, {
       method: "GET",
     });
 
@@ -24,7 +36,7 @@ export async function goToCheckout() {
 
     if (!res.ok) {
       console.error("Lambda側のエラー:", data);
-      alert("サーバー側でエラーが発生しました（Stripe設定か環境変数を確認してください）。");
+      alert("サーバー側でエラーが発生しました。");
       return;
     }
 
@@ -36,6 +48,6 @@ export async function goToCheckout() {
     }
   } catch (e) {
     console.error("goToCheckout 内での想定外エラー:", e);
-    alert("決済処理でエラーが発生しました。詳細はコンソールを確認してください。");
+    alert("決済処理でエラーが発生しました。");
   }
 }

@@ -19,7 +19,7 @@
       "function": {
         "billingApi": {
           "deploymentBucketName": "amplify-soralabapp-dev-0c741-deployment",
-          "s3Key": "amplify-builds/billingApi-6e59497248414b31384a-build.zip"
+          "s3Key": "amplify-builds/billingApi-535657685155667a6b70-build.zip"
         }
       },
       "storage": {
