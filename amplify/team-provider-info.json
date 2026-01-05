@@ -1,0 +1,20 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-soralabapp-dev-0c741-authRole",
+      "UnauthRoleArn": "arn:aws:iam::394504785225:role/amplify-soralabapp-dev-0c741-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::394504785225:role/amplify-soralabapp-dev-0c741-authRole",
+      "Region": "ap-northeast-1",
+      "DeploymentBucketName": "amplify-soralabapp-dev-0c741-deployment",
+      "UnauthRoleName": "amplify-soralabapp-dev-0c741-unauthRole",
+      "StackName": "amplify-soralabapp-dev-0c741",
+      "StackId": "arn:aws:cloudformation:ap-northeast-1:394504785225:stack/amplify-soralabapp-dev-0c741/72292830-e9f3-11f0-90c4-0aeb3dc90c3b",
+      "AmplifyAppId": "d39ketzz56zc73"
+    },
+    "categories": {
+      "auth": {
+        "soralabapp59b4b4e6": {}
+      }
+    }
+  }
+}

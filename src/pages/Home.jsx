@@ -1,15 +1,17 @@
 import "../App.css";
+import { useNavigate } from "react-router-dom";
 
 export default function Home() {
+  const navigate = useNavigate();
+
+  // ✅ React Routerでアプリ内遷移（ログイン制御できるようにする）
   const goToFormCompare = () => {
-    window.location.href = "https://main.dvlikxymh6o1o.amplifyapp.com/";
+    navigate("/form-compare");
   };
 
+  // ✅ いったんダミー（次にStripe Checkoutへつなぐ）
   const startSubscription = () => {
-    // いったん “フォーム比較アプリ側” に飛ばして決済開始（暫定）
-    // 入口ページに決済APIを移したら、ここを差し替える
-    window.location.href =
-      "https://main.dvlikxymh6o1o.amplifyapp.com/?start=subscribe";
+    alert("ここは次にStripeの決済（Checkout）へつなぎます！");
   };
 
   return (
@@ -65,9 +67,8 @@ export default function Home() {
 
         {/* フッター */}
         <footer className="sl-footer">
-
           <a className="sl-link" href="/tokushoho">
-          特定商取引法に基づく表記
+            特定商取引法に基づく表記
           </a>
 
           <span className="sl-dot">•</span>
@@ -75,7 +76,9 @@ export default function Home() {
           <a className="sl-link" href="/refund">
             返金・キャンセルについて
           </a>
+
           <span className="sl-dot">•</span>
+
           <a className="sl-link" href="/contact">
             お問い合わせ
           </a>
