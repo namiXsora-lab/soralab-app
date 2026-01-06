@@ -1,4 +1,4 @@
-import { goToCheckout } from "./checkout";
+import { goToCheckout } from "../checkout";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as posedetection from "@tensorflow-models/pose-detection";
 import * as tf from "@tensorflow/tfjs-core";

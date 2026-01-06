@@ -15,7 +15,10 @@
       "name": "/checkout",
       "lambdaFunction": "billingApi",
       "permissions": {
-        "setting": "open"
+        "setting": "private",
+        "auth": [
+          "read"
+        ]
       }
     }
   }

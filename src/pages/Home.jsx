@@ -1,3 +1,4 @@
+import { goToCheckout } from "../checkout";
 import "../App.css";
 import { useNavigate } from "react-router-dom";
 
@@ -11,7 +12,7 @@ export default function Home() {
 
   // ✅ いったんダミー（次にStripe Checkoutへつなぐ）
   const startSubscription = () => {
-    alert("ここは次にStripeの決済（Checkout）へつなぎます！");
+    goToCheckout();
   };
 
   return (
