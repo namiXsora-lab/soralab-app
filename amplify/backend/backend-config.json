@@ -48,6 +48,11 @@
       "build": true,
       "providerPlugin": "awscloudformation",
       "service": "Lambda"
+    },
+    "stripeWebhookSoralab": {
+      "build": true,
+      "providerPlugin": "awscloudformation",
+      "service": "Lambda"
     }
   },
   "parameters": {
@@ -64,6 +69,22 @@
         {
           "category": "function",
           "resourceName": "billingApi"
+        }
+      ]
+    },
+    "AMPLIFY_function_stripeWebhookSoralab_deploymentBucketName": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "stripeWebhookSoralab"
+        }
+      ]
+    },
+    "AMPLIFY_function_stripeWebhookSoralab_s3Key": {
+      "usedBy": [
+        {
+          "category": "function",
+          "resourceName": "stripeWebhookSoralab"
         }
       ]
     }
