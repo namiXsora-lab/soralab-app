@@ -3,7 +3,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 
 // あなたの Function URL（これでOK）
 const CHECKOUT_URL =
-  "https://iap7rjj3eccm26idib5qbjhfhu0tcfdd.lambda-url.ap-northeast-1.on.aws/";
+  "https://y52zfio4j2oyar3tn632nj7mpu0nebkh.lambda-url.ap-northeast-1.on.aws/";
 
 export async function goToCheckout() {
   try {
