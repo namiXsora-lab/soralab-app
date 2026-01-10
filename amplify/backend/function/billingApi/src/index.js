@@ -8,11 +8,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 const SUCCESS_URL =
   process.env.CHECKOUT_SUCCESS_URL ||
-  "https://main.dvlikxymh6o1o.amplifyapp.com/"; // ← ベースにする（?以降は付けない）
+  "https://main.d3sy4qro8vglws.amplifyapp.com/success";
 
 const CANCEL_URL =
   process.env.CHECKOUT_CANCEL_URL ||
-  "https://main.dvlikxymh6o1o.amplifyapp.com/";
+  "https://main.d3sy4qro8vglws.amplifyapp.com/?status=cancel";
 
 function getMethod(event) {
   return (
@@ -85,7 +85,7 @@ exports.handler = async (event) => {
       line_items: [{ price: priceId, quantity: 1 }],
 
       success_url: `${SUCCESS_URL}?status=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${CANCEL_URL}?status=cancel`,
+      cancel_url: CANCEL_URL,
 
       client_reference_id: userSub,
       metadata: { userSub },
