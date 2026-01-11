@@ -30,15 +30,15 @@ function getHeaderCaseInsensitive(headers = {}, name) {
 }
 
 async function upsertSubscriptionByUserSub(userSub, patch) {
-  // patch の中身をSubscriptionsテーブルに “上書き/追加” していく最小Update
-  // status / stripeCustomerId / stripeSubscriptionId / updatedAt などを保存する想定
   const now = new Date().toISOString();
 
-  const exprNames = { "#userSub": "userSub" };
-  const exprValues = { ":userSub": userSub, ":updatedAt": now };
+  const exprNames = {}; // ★ #userSub を作らない
+  const exprValues = { ":updatedAt": now };
 
-  // 更新式を動的に組む
-  let updateExp = "SET updatedAt = :updatedAt";
+  // updatedAt も # にして統一（地味に安全）
+  exprNames["#updatedAt"] = "updatedAt";
+  let updateExp = "SET #updatedAt = :updatedAt";
+
   for (const [k, v] of Object.entries(patch)) {
     exprNames[`#${k}`] = k;
     exprValues[`:${k}`] = v;
@@ -47,7 +47,7 @@ async function upsertSubscriptionByUserSub(userSub, patch) {
 
   const cmd = new UpdateCommand({
     TableName: TABLE_NAME,
-    Key: { userSub },
+    Key: { userSub }, // PKはこれでOK
     UpdateExpression: updateExp,
     ExpressionAttributeNames: exprNames,
     ExpressionAttributeValues: exprValues,
