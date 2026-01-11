@@ -8,6 +8,8 @@
     "@types/aws-lambda": "^8.10.92"
   },
   "dependencies": {
-    "stripe": "^20.1.2"
+    "stripe": "^20.1.2",
+    "@aws-sdk/client-dynamodb": "^3.540.0",
+    "@aws-sdk/lib-dynamodb": "^3.540.0"
   }
 }

@@ -23,7 +23,7 @@
         },
         "stripeWebhookSoralab": {
           "deploymentBucketName": "amplify-soralabapp-dev-0c741-deployment",
-          "s3Key": "amplify-builds/stripeWebhookSoralab-727844503472686a3135-build.zip"
+          "s3Key": "amplify-builds/stripeWebhookSoralab-5449347a76486566506d-build.zip"
         }
       },
       "storage": {
