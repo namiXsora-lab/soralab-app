@@ -3,6 +3,7 @@ import MainFormApp from "./MainFormApp"; // あなたの構成のままでOK
 import { getSubscription } from "../api/subscription";
 import { signOut } from "aws-amplify/auth";
 import { useNavigate } from "react-router-dom";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 export default function FormCompare() {
   const navigate = useNavigate();
@@ -14,15 +15,38 @@ export default function FormCompare() {
   useEffect(() => {
     (async () => {
       try {
+        // ① 未ログインならここで弾く（/loginへ）
+        const session = await fetchAuthSession();
+        const idToken = session.tokens?.idToken?.toString();
+        if (!idToken) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        // ② ログイン済みなら契約チェック
         const s = await getSubscription();
         setSub(s);
       } catch (e) {
-        setErr(e?.message || "契約状況の取得に失敗しました");
+        const msg = e?.message || "";
+
+        // ③ Unauthorized系はログインへ飛ばす
+        if (
+          msg.includes("Unauthorized") ||
+          msg.includes("NotAuthorized") ||
+          msg.includes("No current user") ||
+          msg.includes("Missing Authentication Token") ||
+          msg.includes("401")
+        ) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        setErr("契約状況の取得に失敗しました");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [navigate]);
 
   const logout = async () => {
     await signOut();
