@@ -10,20 +10,18 @@ export default function Home() {
     try {
       // 1) CognitoのIDトークン取得
       const session = await fetchAuthSession();
-      const idToken = session.tokens?.idToken?.toString();
+      const token = session.tokens?.accessToken?.toString(); // accessToken推奨
 
-      if (!idToken) {
-        // 未ログイン扱い（ログイン導線があるならそこへ）
+      if (!token) {
         alert("ログインが必要です。いったんログインしてください。");
         return;
       }
 
-      // 2) /subscription を叩く（ヘッダーにAuthorization）
       const res = await fetch(
         "https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/subscription",
         {
           method: "GET",
-          headers: { Authorization: `Bearer ${idToken}` },
+          headers: { Authorization: `Bearer ${token}` }, // ★ Bearer 必須
         }
       );
 
