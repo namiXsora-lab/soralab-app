@@ -142,6 +142,14 @@ exports.handler = async (event) => {
         // アプリ用 isPaid 判定（まずは超シンプルに）
         const isPaid = stripeStatus === "active" || stripeStatus === "trialing";
 
+        // 👇 ここに追加
+        console.log("update to active", {
+          eventType: stripeEvent.type,
+          userSub,
+          stripeStatus,
+          isPaid,
+        });
+
         await upsertSubscriptionByUserSub(userSub, {
           isPaid,
           status: isPaid ? "active" : "inactive",
