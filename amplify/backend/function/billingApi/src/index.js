@@ -6,6 +6,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2023-10-16",
 });
 
+const AWS = require("aws-sdk");
+const ddb = new AWS.DynamoDB.DocumentClient();
+
 const SUCCESS_URL =
   process.env.CHECKOUT_SUCCESS_URL ||
   "https://main.d3sy4qro8vglws.amplifyapp.com/success";
@@ -55,6 +58,52 @@ exports.handler = async (event) => {
 
   try {
     const path = getPath(event);
+
+    // ====== 追加：/subscription（会員判定） ======
+    if (path.endsWith("/subscription")) {
+      const userSub = getUserSub(event);
+      if (!userSub) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ message: "Unauthorized (no userSub)" }),
+        };
+      }
+
+      const tableName = process.env.SUBSCRIPTIONS_TABLE;
+      if (!tableName) {
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({ message: "Missing env SUBSCRIPTIONS_TABLE" }),
+        };
+      }
+
+      const res = await ddb
+        .get({
+          TableName: tableName,
+          Key: { userSub },
+        })
+        .promise();
+
+      const item = res.Item || null;
+
+      const isActive =
+        item &&
+        item.isPaid === true &&
+        (item.status === "active" || item.stripeStatus === "active");
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          ok: true,
+          userSub,
+          isActive,
+          subscription: item,
+        }),
+      };
+    }
 
     // /checkout でも / でも許可（どちらかに寄せたいならここを調整）
     const okPath = path === "/" || path.endsWith("/checkout");
