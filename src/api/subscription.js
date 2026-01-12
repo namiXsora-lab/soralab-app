@@ -3,7 +3,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 
 export async function getSubscription() {
   const session = await fetchAuthSession();
-  const token = session.tokens?.accessToken?.toString(); // ★accessToken推奨
+  const token = session.tokens?.idToken?.toString(); // ★accessToken推奨
 
   if (!token) throw new Error("Not signed in");
 
