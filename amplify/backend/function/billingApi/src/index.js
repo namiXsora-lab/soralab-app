@@ -106,7 +106,7 @@ exports.handler = async (event) => {
     }
 
     // /checkout でも / でも許可（どちらかに寄せたいならここを調整）
-    const okPath = path === "/" || path.endsWith("/checkout");
+    const okPath = path === "/" || path.endsWith("/checkout") || path.endsWith("/subscription");
     if (!okPath) {
       return { statusCode: 404, headers, body: JSON.stringify({ message: "Not Found" }) };
     }

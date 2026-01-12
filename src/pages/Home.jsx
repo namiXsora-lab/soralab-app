@@ -23,7 +23,7 @@ export default function Home() {
         "https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/subscription",
         {
           method: "GET",
-          headers: { Authorization: idToken },
+          headers: { Authorization: `Bearer ${idToken}` },
         }
       );
 
