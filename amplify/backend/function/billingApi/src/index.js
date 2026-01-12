@@ -99,7 +99,8 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           ok: true,
           userSub,
-          isActive,
+          isSubscribed: isActive,   // ★ これを追加（または置き換え）
+          isActive,                 // ←残してもOK
           subscription: item,
         }),
       };
