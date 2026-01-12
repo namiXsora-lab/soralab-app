@@ -32,25 +32,27 @@ export default function Login() {
 
   const onLogin = async () => {
     setErr("");
-    setInfo("");
     setLoading(true);
+    console.log("LOGIN CLICK", { email });
+
     try {
-      await signIn({ username: email, password });
+      const res = await signIn({ username: email, password });
+      console.log("SIGNIN OK", res);
       navigate(from, { replace: true });
     } catch (e) {
+      console.log("SIGNIN NG", e);
       const msg =
         e?.name === "NotAuthorizedException"
           ? "メールアドレスまたはパスワードが違います。"
           : e?.name === "UserNotFoundException"
-          ? "そのメールアドレスのユーザーが見つかりません。まずは新規登録してください。"
-          : e?.name === "UserAlreadyAuthenticatedException"
-          ? "すでにログイン状態でした。ページを更新してもう一度お試しください。"
-          : e?.message || "ログインに失敗しました。もう一度お試しください。";
+            ? "そのメールアドレスのユーザーが見つかりません。まずは新規登録してください。"
+            : e?.message || "ログインに失敗しました。もう一度お試しください。";
       setErr(msg);
     } finally {
       setLoading(false);
     }
   };
+
 
   // ✅ パスワードリセット（コード送信）
   const onSendResetCode = async () => {
