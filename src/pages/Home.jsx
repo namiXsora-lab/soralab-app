@@ -2,6 +2,7 @@ import { goToCheckout } from "../checkout";
 import "../App.css";
 import { useNavigate } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
+import { Link } from "react-router-dom";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -104,6 +105,13 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        {/* 無料の試作ツール（認証なし） */}
+        <div style={{ marginTop: 10, textAlign: "center" }}>
+          <Link className="sl-link" to="/polevault">
+            棒高跳びフォーム診断（無料・試作）
+          </Link>
+        </div>
 
         {/* フッター */}
         <footer className="sl-footer">
