@@ -190,11 +190,11 @@ export default function PoleVaultDiagnosis() {
 
     // ★追加：メタ情報がまだ取れてない場合は止める
     if (!meta.duration || !meta.width || !meta.height) {
-        setCheckResult({
-            checkStatus: "warning",
-            message: "動画情報を読み込み中です。少し待ってからもう一度「診断する」を押してください。",
-        });
-        return;
+      setCheckResult({
+        checkStatus: "warning",
+        message: "動画情報を読み込み中です。少し待ってからもう一度「診断する」を押してください。",
+      });
+      return;
     }
 
     setStatus("checking");
@@ -212,55 +212,56 @@ export default function PoleVaultDiagnosis() {
     // いまはダミー診断で返す（0.6秒だけ“処理中”演出）
     await new Promise((r) => setTimeout(r, 600));
 
-    const resp = await fetch("http://localhost:8787/api/polevault/diagnose", {
-     method: "POST",
-     headers: { "Content-Type": "application/json" },
-     body: JSON.stringify(meta),
+    const resp = await fetch("https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/polevault/diagnose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(meta),
     });
+
 
     const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
-     setCheckResult({
+      setCheckResult({
         checkStatus: "error",
         message: data.message || "診断に失敗しました。",
-    });
-    setStatus("error");
-    return;
+      });
+      setStatus("error");
+      return;
     }
 
     // サーバのチェック文言を表示
     setCheckResult({
-        checkStatus: data.checkStatus,
-        message: data.message,
+      checkStatus: data.checkStatus,
+      message: data.message,
     });
 
     // 結果表示（summary / todayFocus / details がそのまま使える）
     setResult({
-        summary: data.summary,
-        todayFocus: data.todayFocus,
-        details: {
-            planting: data.details?.planting || {
-             reason: "—",
-             impact: "—",
-             drill: "—",
-            },
-            takeoff: data.details?.takeoff || {
-                reason: "—",
-                impact: "—",
-                drill: "—",
-            },
-            drive: data.details?.drive || {
-                reason: "—",
-                impact: "—",
-                drill: "—",
-            },
-            inversion: data.details?.inversion || {
-                reason: "—",
-                impact: "—",
-                drill: "—",
-            },
+      summary: data.summary,
+      todayFocus: data.todayFocus,
+      details: {
+        planting: data.details?.planting || {
+          reason: "—",
+          impact: "—",
+          drill: "—",
         },
+        takeoff: data.details?.takeoff || {
+          reason: "—",
+          impact: "—",
+          drill: "—",
+        },
+        drive: data.details?.drive || {
+          reason: "—",
+          impact: "—",
+          drill: "—",
+        },
+        inversion: data.details?.inversion || {
+          reason: "—",
+          impact: "—",
+          drill: "—",
+        },
+      },
     });
 
     setStatus("done");
