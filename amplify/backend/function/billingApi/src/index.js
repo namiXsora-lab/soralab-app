@@ -27,7 +27,7 @@ function getMethod(event) {
 }
 
 function getPath(event) {
-  return event?.rawPath || event?.path || "/";
+  return event?.rawPath || event?.path || event?.resource || "/";
 }
 
 function getUserSub(event) {
@@ -45,6 +45,9 @@ function getUserSub(event) {
 
 exports.handler = async (event) => {
   console.log("EVENT:", JSON.stringify(event));
+  console.log("HAS requestContext?", !!event.requestContext);
+  console.log("PATH rawPath/path:", event.rawPath, event.path);
+  console.log("METHOD guess:", getMethod(event));
 
   const headers = {
     "Access-Control-Allow-Origin": "*",
@@ -112,7 +115,13 @@ exports.handler = async (event) => {
         return { statusCode: 405, headers, body: JSON.stringify({ message: "Method Not Allowed" }) };
       }
 
-      const meta = JSON.parse(event.body || "{}");
+      // ★ ここに貼る
+      let meta = {};
+      try {
+        meta = event?.body ? JSON.parse(event.body) : event;
+      } catch {
+        meta = {};
+      }
 
       // 最低限のチェック（フロントの checkVideo 相当をサーバで）
       const chk = checkVideo(meta);
