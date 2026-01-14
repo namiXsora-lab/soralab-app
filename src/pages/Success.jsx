@@ -1,10 +1,14 @@
 // src/SuccessThanks.jsx
+import { useNavigate } from "react-router-dom";
 
 export default function Success() {
+
+  const navigate = useNavigate();
+
   const goNext = () => {
     // ✅ クエリ（status / session_id）を消して、通常画面へ戻す
     // いちばん確実に状態をリセットできるので、フェーズ1ではこれでOK
-    window.location.href = window.location.pathname;
+    navigate("/form-compare", { replace: true });
   };
 
   return (
