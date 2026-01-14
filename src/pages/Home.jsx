@@ -10,39 +10,45 @@ export default function Home() {
     const session = await fetchAuthSession();
     const token = session.tokens?.accessToken?.toString();
     if (!token) {
-      navigate("/login", { state: { from: "/" } });
-      return null;
+      navigate("/login", { state: { from: "/form-compare" } });
+      return;
     }
     return token;
   };
 
   const goToFormCompare = async () => {
     try {
-      const token = await requireLogin();
-      if (!token) return;
+      const session = await fetchAuthSession();
+      const token = session.tokens?.accessToken?.toString();
+
+      // ★未ログインは必ずログインへ
+      if (!token) {
+        navigate("/login", { state: { from: "/form-compare" } });
+        return;
+      }
 
       const res = await fetch(
         "https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/subscription",
         { method: "GET", headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const data = await res.json().catch(() => ({}));
+      // ★401/403はログインへ（セッション切れ・トークン不整合の可能性）
+      if (res.status === 401 || res.status === 403) {
+        navigate("/login", { state: { from: "/form-compare" } });
+        return;
+      }
 
-      const isActive =
-        data?.isActive === true ||
-        data?.isPaid === true ||
-        data?.status === "active";
+      const data = await res.json().catch(() => ({}));
+      const isActive = data?.isActive === true;
 
       if (res.ok && isActive) {
         navigate("/form-compare");
       } else {
-        // 未加入なら決済へ（※ログイン済みの時だけ）
-        goToCheckout();
+        goToCheckout(); // ★ここで初めて決済へ
       }
     } catch (e) {
       console.error(e);
-      alert("会員チェックでエラーが出ました。もう一度ログインして試してください。");
-      navigate("/login", { state: { from: "/" } });
+      alert("会員チェックでエラーが出ました。もう一度お試しください。");
     }
   };
 
