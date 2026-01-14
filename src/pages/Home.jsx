@@ -1,37 +1,33 @@
 import { goToCheckout } from "../checkout";
 import "../App.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { fetchAuthSession } from "aws-amplify/auth";
-import { Link } from "react-router-dom";
 
 export default function Home() {
   const navigate = useNavigate();
 
+  const requireLogin = async () => {
+    const session = await fetchAuthSession();
+    const token = session.tokens?.accessToken?.toString();
+    if (!token) {
+      navigate("/login", { state: { from: "/" } });
+      return null;
+    }
+    return token;
+  };
+
   const goToFormCompare = async () => {
     try {
-      // 1) CognitoのIDトークン取得
-      const session = await fetchAuthSession();
-      const token = session.tokens?.accessToken?.toString(); // accessToken推奨
-
-      if (!token) {
-        alert("ログインが必要です。いったんログインしてください。");
-        return;
-      }
+      const token = await requireLogin();
+      if (!token) return;
 
       const res = await fetch(
         "https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/subscription",
-        {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` }, // ★ Bearer 必須
-        }
+        { method: "GET", headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const text = await res.text();
-      let data = {};
-      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      const data = await res.json().catch(() => ({}));
 
-      // 3) 判定（まずはシンプル）
-      // 返ってくるJSONに isPaid / status / isActive が入るようになったらここで判定できます
       const isActive =
         data?.isActive === true ||
         data?.isPaid === true ||
@@ -40,25 +36,30 @@ export default function Home() {
       if (res.ok && isActive) {
         navigate("/form-compare");
       } else {
-        // NGなら決済へ
+        // 未加入なら決済へ（※ログイン済みの時だけ）
         goToCheckout();
       }
     } catch (e) {
       console.error(e);
       alert("会員チェックでエラーが出ました。もう一度ログインして試してください。");
+      navigate("/login", { state: { from: "/" } });
     }
   };
 
-
-  // ✅ いったんダミー（次にStripe Checkoutへつなぐ）
-  const startSubscription = () => {
-    goToCheckout();
+  const startSubscription = async () => {
+    try {
+      const token = await requireLogin();
+      if (!token) return;
+      goToCheckout();
+    } catch (e) {
+      console.error(e);
+      navigate("/login", { state: { from: "/" } });
+    }
   };
 
   return (
     <div className="sl-page">
       <main className="sl-shell">
-        {/* ヘッダー */}
         <header className="sl-header">
           <div className="sl-mark" aria-hidden>
             <span className="sl-cloud" />
@@ -73,7 +74,6 @@ export default function Home() {
           </p>
         </header>
 
-        {/* カード */}
         <section className="sl-grid">
           <div className="sl-card">
             <h2 className="sl-cardTitle">ご利用中の方</h2>
@@ -106,30 +106,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 無料の試作ツール（認証なし） */}
         <div style={{ marginTop: 10, textAlign: "center" }}>
           <Link className="sl-link" to="/polevault">
             棒高跳びフォーム診断（無料・試作）
           </Link>
         </div>
 
-        {/* フッター */}
         <footer className="sl-footer">
-          <a className="sl-link" href="/tokushoho">
-            特定商取引法に基づく表記
-          </a>
-
+          <a className="sl-link" href="/tokushoho">特定商取引法に基づく表記</a>
           <span className="sl-dot">•</span>
-
-          <a className="sl-link" href="/refund">
-            返金・キャンセルについて
-          </a>
-
+          <a className="sl-link" href="/refund">返金・キャンセルについて</a>
           <span className="sl-dot">•</span>
-
-          <a className="sl-link" href="/contact">
-            お問い合わせ
-          </a>
+          <a className="sl-link" href="/contact">お問い合わせ</a>
         </footer>
       </main>
     </div>
