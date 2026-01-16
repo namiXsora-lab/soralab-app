@@ -1,39 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 
-const LABEL = {
-  good: "◎",
-  ok: "◯",
-  bad: "△",
-};
-
-const [currentTime, setCurrentTime] = useState(0);
-const [capturedUrl, setCapturedUrl] = useState(null);
-const canvasRef = useRef(null);
-
-const nudge = (sec) => {
-  const v = videoRef.current;
-  if (!v) return;
-  v.pause();
-  const t = Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + sec));
-  v.currentTime = t;
-  setCurrentTime(t);
-};
-
-const captureFrame = () => {
-  const v = videoRef.current;
-  const c = canvasRef.current;
-  if (!v || !c) return;
-
-  c.width = v.videoWidth;
-  c.height = v.videoHeight;
-
-  const ctx = c.getContext("2d");
-  ctx.drawImage(v, 0, 0, c.width, c.height);
-
-  // 画像URL化して表示
-  const url = c.toDataURL("image/png");
-  setCapturedUrl(url);
-};
+const LABEL = { good: "◎", ok: "◯", bad: "△" };
 
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
@@ -175,6 +142,33 @@ function diagnoseDummy(meta) {
 
 export default function PoleVaultDiagnosis() {
   const videoRef = useRef(null);
+
+  const [currentTime, setCurrentTime] = useState(0);
+  const [capturedUrl, setCapturedUrl] = useState(null);
+  const canvasRef = useRef(null);
+
+  const nudge = (sec) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    const t = Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + sec));
+    v.currentTime = t;
+    setCurrentTime(t);
+  };
+
+  const captureFrame = () => {
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    if (!v || !c) return;
+
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+
+    const ctx = c.getContext("2d");
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+
+    setCapturedUrl(c.toDataURL("image/png"));
+  };
 
   const [status, setStatus] = useState("idle"); // idle | ready | checking | analyzing | done | error
   const [videoUrl, setVideoUrl] = useState(null);
