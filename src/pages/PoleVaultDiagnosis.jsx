@@ -6,6 +6,35 @@ const LABEL = {
   bad: "△",
 };
 
+const [currentTime, setCurrentTime] = useState(0);
+const [capturedUrl, setCapturedUrl] = useState(null);
+const canvasRef = useRef(null);
+
+const nudge = (sec) => {
+  const v = videoRef.current;
+  if (!v) return;
+  v.pause();
+  const t = Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + sec));
+  v.currentTime = t;
+  setCurrentTime(t);
+};
+
+const captureFrame = () => {
+  const v = videoRef.current;
+  const c = canvasRef.current;
+  if (!v || !c) return;
+
+  c.width = v.videoWidth;
+  c.height = v.videoHeight;
+
+  const ctx = c.getContext("2d");
+  ctx.drawImage(v, 0, 0, c.width, c.height);
+
+  // 画像URL化して表示
+  const url = c.toDataURL("image/png");
+  setCapturedUrl(url);
+};
+
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
@@ -218,7 +247,6 @@ export default function PoleVaultDiagnosis() {
       body: JSON.stringify(meta),
     });
 
-
     const data = await resp.json().catch(() => ({}));
 
     if (!resp.ok) {
@@ -316,10 +344,42 @@ export default function PoleVaultDiagnosis() {
             controls
             style={{ width: "100%", maxWidth: 720, borderRadius: 12, border: "1px solid #eee" }}
             onLoadedMetadata={onLoadedMetadata}
+            onTimeUpdate={() => {
+              const v = videoRef.current;
+              if (!v) return;
+              setCurrentTime(v.currentTime);
+            }}
           />
           <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
             参考：{meta.width}×{meta.height} / {meta.duration ? `${meta.duration.toFixed(2)}s` : "-"} / FPS：{meta.fps ?? "（未取得）"}
           </div>
+        </div>
+      )}
+
+      {videoUrl && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <button onClick={() => nudge(-0.10)}>◀︎ -0.10s</button>
+          <button onClick={() => nudge(-0.03)}>◀︎ -0.03s</button>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>
+            現在: {currentTime.toFixed(2)}s
+          </div>
+          <button onClick={() => nudge(0.03)}>+0.03s ▶︎</button>
+          <button onClick={() => nudge(0.10)}>+0.10s ▶︎</button>
+          <button onClick={captureFrame}>この瞬間をキャプチャ</button>
+
+          {/* 画面に出さないcanvas（キャプチャ用） */}
+          <canvas ref={canvasRef} style={{ display: "none" }} />
+        </div>
+      )}
+
+      {capturedUrl && (
+        <div style={{ marginTop: 12 }}>
+          <h3 style={{ marginBottom: 8 }}>キャプチャ画像</h3>
+          <img
+            src={capturedUrl}
+            alt="captured"
+            style={{ width: "100%", maxWidth: 720, borderRadius: 12, border: "1px solid #eee" }}
+          />
         </div>
       )}
 
