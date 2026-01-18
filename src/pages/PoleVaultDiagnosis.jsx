@@ -1,321 +1,366 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
-const LABEL = { good: "◎", ok: "◯", bad: "△" };
+// ★ import の下（angleBetweenの近く）に追加
+function drawMarker(ctx, x, y, label) {
+  ctx.save();
 
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
+  const padding = 6;
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  const textWidth = ctx.measureText(label).width;
+  const boxW = textWidth + padding * 2;
+  const boxH = 20;
+
+  // 背景（半透明）
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.beginPath();
+  ctx.roundRect(x - boxW / 2, y - boxH / 2, boxW, boxH, 6);
+  ctx.fill();
+
+  // 文字
+  ctx.fillStyle = "white";
+  ctx.fillText(label, x, y);
+
+  ctx.restore();
 }
 
-// いったんMVP：fps/尺/解像度で「撮影条件チェック」→結果はダミーで返す
-function checkVideo(meta) {
-  const { duration, width, height, fps } = meta;
-
-  // 解析不可（最低条件）
-  if (!duration || duration < 2.0) {
-    return {
-      checkStatus: "error",
-      message:
-        "この動画では診断ができませんでした。\n助走〜反転まで映る動画で、もう一度お試しください。",
-    };
-  }
-  if (!width || !height || Math.min(width, height) < 360) {
-    return {
-      checkStatus: "error",
-      message:
-        "この動画では診断ができませんでした。\n画質が低い可能性があります。もう一度お試しください。",
-    };
-  }
-
-  // 注意（診断はする）
-  if (fps && fps < 24) {
-    return {
-      checkStatus: "warning",
-      message: "この動画は撮影条件の影響により、診断結果は「参考値」となります。",
-    };
-  }
-  if (duration > 20) {
-    return {
-      checkStatus: "warning",
-      message:
-        "動画が長めのため、診断結果は「参考値」となります。\n（助走〜反転が短く収まる動画が安定します）",
-    };
-  }
-
-  // OK
-  return {
-    checkStatus: "ok",
-    message: "動画を確認しました。フォーム診断を開始します。",
-  };
-}
-
-// MVP：いまは“見た目の診断”を演出するためのダミーロジック
-// 将来ここを「解析APIの結果」に置き換える
-function diagnoseDummy(meta) {
-  // duration・fps・解像度から“それっぽい”ばらつきを作る（固定的に再現されるように）
-  const seed =
-    (meta.duration || 0) * 1000 +
-    (meta.fps || 0) * 10 +
-    (meta.width || 0) +
-    (meta.height || 0);
-
-  const r = (k) => {
-    const x = Math.sin(seed * (k + 1)) * 10000;
-    return x - Math.floor(x); // 0..1
-  };
-
-  const pick = (x) => {
-    // 0..1 を good/ok/bad に
-    if (x < 0.25) return "bad";
-    if (x < 0.60) return "ok";
-    return "good";
-  };
-
-  const summary = {
-    planting: pick(r(1)),
-    takeoff: pick(r(2)),
-    drive: pick(r(3)),
-    inversion: pick(r(4)),
-  };
-
-  // “今日の改善ポイント”は bad を優先して1つ選ぶ
-  const order = ["drive", "planting", "takeoff", "inversion"];
-  const titleMap = {
-    planting: {
-      good: "植え込みタイミング：適切",
-      ok: "植え込みタイミング：やや早い",
-      bad: "植え込みタイミング：早すぎ",
-      advice: "助走リズムに合わせて植え込みを遅らせる意識",
-    },
-    takeoff: {
-      good: "踏切×ポール角：安定",
-      ok: "踏切×ポール角：やや不安定",
-      bad: "踏切×ポール角：不安定",
-      advice: "踏切位置を一定に（目印を作る）",
-    },
-    drive: {
-      good: "離陸の突っ込み：十分",
-      ok: "離陸の突っ込み：やや不足",
-      bad: "離陸の突っ込み：不足",
-      advice: "踏切後も前に進む意識（引き上げを急がない）",
-    },
-    inversion: {
-      good: "反転タイミング：適切",
-      ok: "反転タイミング：やや早い",
-      bad: "反転タイミング：早すぎ",
-      advice: "ポールの戻りを待ってから反転に入る意識",
-    },
-  };
-
-  let focusKey = order.find((k) => summary[k] === "bad") || order.find((k) => summary[k] === "ok") || "drive";
-  const focus = titleMap[focusKey];
-
-  const todayFocus = {
-    title: focus[summary[focusKey]],
-    advice: focus.advice,
-  };
-
-  const details = {
-    planting: {
-      reason: "助走と植え込みの同期を見る項目です。",
-      impact: "タイミングが合うと、踏切の力がポールに素直に伝わります。",
-      drill: "助走の最後3歩を一定リズムで（動画でリズム確認）",
-    },
-    takeoff: {
-      reason: "踏切位置とポール角の安定性を見る項目です。",
-      impact: "ズレが減るほど、跳びが再現しやすくなります。",
-      drill: "踏切位置にテープで目印（同じ位置で踏めるか）",
-    },
-    drive: {
-      reason: "離陸直後に前へ進むエネルギーが残っているかを見る項目です。",
-      impact: "突っ込みが出るほど、ポールへエネルギーを乗せやすくなります。",
-      drill: "踏切後に“前を見る”意識で、引き上げを急がない",
-    },
-    inversion: {
-      reason: "反転がポールの戻りと同期しているかを見る項目です。",
-      impact: "同期すると、抜けで高さを作りやすくなります。",
-      drill: "反転は“待ってから”入る（慌てて先に回らない）",
-    },
-  };
-
-  return { summary, todayFocus, details };
+/**
+ * 2つの2Dベクトル(v1, v2)のなす角（0〜180度）
+ */
+function angleBetween(v1, v2) {
+  const dot = v1.x * v2.x + v1.y * v2.y;
+  const mag1 = Math.hypot(v1.x, v1.y);
+  const mag2 = Math.hypot(v2.x, v2.y);
+  if (mag1 === 0 || mag2 === 0) return null;
+  const cos = dot / (mag1 * mag2);
+  const clamped = Math.min(Math.max(cos, -1), 1);
+  return Math.acos(clamped) * (180 / Math.PI);
 }
 
 export default function PoleVaultDiagnosis() {
   const videoRef = useRef(null);
 
+  // キャプチャ用（非表示）
+  const captureCanvasRef = useRef(null);
+
+  // MediaPipe
+  const landmarkerRef = useRef(null);
+  const [poseReady, setPoseReady] = useState(false);
+
+  // UI状態
+  const [videoUrl, setVideoUrl] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [capturedUrl, setCapturedUrl] = useState(null);
-  const canvasRef = useRef(null);
 
-  const nudge = (sec) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.pause();
-    const t = Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + sec));
-    v.currentTime = t;
-    setCurrentTime(t);
-  };
+  // 角度（画面にも出す）
+  const [angles, setAngles] = useState({
+    leftDeg: null, // 体幹×左上腕のなす角
+    rightDeg: null,
+    leftOpenDeg: null, // 開き角の目安 = 180 - なす角
+    rightOpenDeg: null,
+  });
 
-  const captureFrame = () => {
-    const v = videoRef.current;
-    const c = canvasRef.current;
-    if (!v || !c) return;
+  // 画面メッセージ
+  const [msg, setMsg] = useState("");
 
-    c.width = v.videoWidth;
-    c.height = v.videoHeight;
+  // 追加：表示用overlay（キャプチャ画像の上に重ねる）
+  const overlayCanvasRef = useRef(null);
 
-    const ctx = c.getContext("2d");
-    ctx.drawImage(v, 0, 0, c.width, c.height);
+  // 追加：最後に推定できたランドマークを保持
+  const [poseLandmarks, setPoseLandmarks] = useState(null);
 
-    setCapturedUrl(c.toDataURL("image/png"));
-  };
+  // 追加：キャプチャ画像のピクセルサイズを保持
+  const [captureSize, setCaptureSize] = useState({ w: 0, h: 0 });
 
-  const [status, setStatus] = useState("idle"); // idle | ready | checking | analyzing | done | error
-  const [videoUrl, setVideoUrl] = useState(null);
-  const [meta, setMeta] = useState({ fps: null, duration: null, width: null, height: null });
-  const [checkResult, setCheckResult] = useState(null);
-  const [result, setResult] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
+  useEffect(() => {
+    if (!capturedUrl || !poseLandmarks) return;
 
-  const canDiagnose = useMemo(() => !!videoUrl && (status === "ready" || status === "done"), [videoUrl, status]);
+    // 表示されているcanvasの実寸で描画し直す
+    const canvas = overlayCanvasRef.current;
+    const imgCanvasW = canvas?.clientWidth;
+    const imgCanvasH = canvas?.clientHeight;
+    if (!imgCanvasW || !imgCanvasH) return;
 
+    drawPoseOnOverlay(poseLandmarks, imgCanvasW, imgCanvasH);
+  }, [capturedUrl, poseLandmarks]);
+
+  // MediaPipe 初期化
+  useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        setMsg("骨格推定モデルを読み込み中…");
+
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        );
+
+        const landmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+            delegate: "GPU",
+          },
+          runningMode: "IMAGE",
+          numPoses: 1,
+        });
+
+        if (!cancelled) {
+          landmarkerRef.current = landmarker;
+          setPoseReady(true);
+          setMsg("✅ 骨格推定 準備OK（キャプチャで推定します）");
+          console.log("✅ PoseLandmarker ready");
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setPoseReady(false);
+          setMsg("❌ 骨格推定の初期化に失敗しました（コンソールを確認）");
+        }
+      }
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ファイル選択
   const onFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
-    setStatus("ready");
-    setCheckResult(null);
-    setResult(null);
-    setShowDetails(false);
-    setMeta({ fps: null, duration: null, width: null, height: null });
+
+    // 状態初期化
+    setCapturedUrl(null);
+    setAngles({
+      leftDeg: null,
+      rightDeg: null,
+      leftOpenDeg: null,
+      rightOpenDeg: null,
+    });
+    setMsg(poseReady ? "キャプチャして推定できます" : "骨格推定モデルの準備中…");
   };
 
-  // video のメタ情報が取れたら保存（fpsは正確に取れないことがあるので、取れたらラッキー）
-  const onLoadedMetadata = () => {
+  // コマ送り（secだけ移動）
+  const nudge = (sec) => {
     const v = videoRef.current;
     if (!v) return;
 
-    const duration = v.duration;
-    const width = v.videoWidth;
-    const height = v.videoHeight;
-
-    // fps推定（ブラウザで取れないことが多いので、nullでもOK）
-    // 一応の推定として「durationが短い＆高解像度は60っぽい」などはやらず、未推定にしておく
-    const fps = null;
-
-    setMeta({ fps, duration, width, height });
+    v.pause();
+    const t = Math.max(0, Math.min(v.duration || 0, (v.currentTime || 0) + sec));
+    v.currentTime = t;
+    setCurrentTime(t);
   };
 
-  const runCheckAndDiagnose = async () => {
-    if (!videoUrl) return;
+  // 追加：ランドマーク配列(index)から線を引くためのペア
+  const POSE_CONNECTIONS = [
+    // 顔まわり（必要なら減らしてOK）
+    [0, 1], [1, 2], [2, 3], [3, 7],
+    [0, 4], [4, 5], [5, 6], [6, 8],
+    [9, 10],
 
-    // ★追加：メタ情報がまだ取れてない場合は止める
-    if (!meta.duration || !meta.width || !meta.height) {
-      setCheckResult({
-        checkStatus: "warning",
-        message: "動画情報を読み込み中です。少し待ってからもう一度「診断する」を押してください。",
-      });
+    // 体幹
+    [11, 12], // 肩
+    [11, 23], // 左肩-左股
+    [12, 24], // 右肩-右股
+    [23, 24], // 股
+
+    // 左腕
+    [11, 13],
+    [13, 15],
+
+    // 右腕
+    [12, 14],
+    [14, 16],
+
+    // 左脚
+    [23, 25],
+    [25, 27],
+    [27, 31],
+    [27, 29],
+
+    // 右脚
+    [24, 26],
+    [26, 28],
+    [28, 32],
+    [28, 30],
+  ];
+
+  // 追加：overlay canvas に骨格を描く
+  // 追加：overlay canvas に骨格を描く
+  function drawPoseOnOverlay(landmarks) {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas || !landmarks) return;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+
+    const ctx = canvas.getContext("2d");
+
+    // ★① まず transform を完全リセット
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // ★② 内部解像度で完全クリア（これが黄色い帯対策）
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // ★③ 表示座標系（CSS px）に合わせる
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // 線
+    ctx.strokeStyle = "yellow";
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = Math.max(2, Math.round(w / 500));
+
+    for (const [a, b] of POSE_CONNECTIONS) {
+      const pa = landmarks[a];
+      const pb = landmarks[b];
+      if (!pa || !pb) continue;
+
+      const va = pa.visibility ?? 1;
+      const vb = pb.visibility ?? 1;
+      if (va < 0.5 || vb < 0.5) continue;
+
+      ctx.beginPath();
+      ctx.moveTo(pa.x * w, pa.y * h);
+      ctx.lineTo(pb.x * w, pb.y * h);
+      ctx.stroke();
+    }
+
+    // マーカー
+    const ls = landmarks[11];
+    const rs = landmarks[12];
+    const le = landmarks[13];
+    const re = landmarks[14];
+
+    if (ls) drawMarker(ctx, ls.x * w - 20, ls.y * h - 20, "①");
+    if (rs) drawMarker(ctx, rs.x * w + 20, rs.y * h - 20, "②");
+    if (le) drawMarker(ctx, le.x * w - 20, le.y * h - 10, "③");
+    if (re) drawMarker(ctx, re.x * w + 20, re.y * h - 10, "④");
+  }
+
+  // キャプチャ＆推定＆角度計算（ログ＋画面表示）
+  const captureFrameAndEstimate = () => {
+    const v = videoRef.current;
+    const c = captureCanvasRef.current;
+
+    if (!v || !c) return;
+
+    // video のメタがまだなら待つ
+    if (!v.videoWidth || !v.videoHeight) {
+      setMsg("動画の読み込み中です。少し待ってからキャプチャしてください。");
       return;
     }
 
-    setStatus("checking");
-    const chk = checkVideo(meta);
-    setCheckResult(chk);
+    // 1) キャプチャ
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
 
-    if (chk.checkStatus === "error") {
-      setStatus("error");
+    // ここ（キャプチャ時にキャンバスへ描画した直後あたり）に追加
+    setCaptureSize({ w: c.width, h: c.height });
+
+    const ctx = c.getContext("2d");
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+
+    const url = c.toDataURL("image/png");
+    setCapturedUrl(url);
+
+    // 2) 推定
+    const landmarker = landmarkerRef.current;
+    if (!landmarker) {
+      setMsg("骨格推定の準備中です（少し待ってください）");
+      console.warn("PoseLandmarker not ready yet");
       return;
     }
 
-    setStatus("analyzing");
+    setMsg("推定中…");
 
-    // 将来：ここでAPIへアップロード or videoIdを渡して解析
-    // いまはダミー診断で返す（0.6秒だけ“処理中”演出）
-    await new Promise((r) => setTimeout(r, 600));
-
-    const resp = await fetch("https://mys5k2aiv5.execute-api.ap-northeast-1.amazonaws.com/dev/polevault/diagnose", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(meta),
-    });
-
-    const data = await resp.json().catch(() => ({}));
-
-    if (!resp.ok) {
-      setCheckResult({
-        checkStatus: "error",
-        message: data.message || "診断に失敗しました。",
-      });
-      setStatus("error");
+    const result = landmarker.detect(c);
+    const landmarks = result?.landmarks?.[0];
+    if (!landmarks) {
+      setMsg("骨格が検出できませんでした（人物が小さい/ブレ/画角外の可能性）");
+      console.warn("No pose detected");
       return;
     }
 
-    // サーバのチェック文言を表示
-    setCheckResult({
-      checkStatus: data.checkStatus,
-      message: data.message,
+    setPoseLandmarks(landmarks);
+    requestAnimationFrame(() => drawPoseOnOverlay(landmarks));
+
+    // 3) 必要点を取り出し
+    const ls = landmarks[11]; // left shoulder
+    const rs = landmarks[12]; // right shoulder
+    const le = landmarks[13]; // left elbow
+    const re = landmarks[14]; // right elbow
+    const lh = landmarks[23]; // left hip
+    const rh = landmarks[24]; // right hip
+
+    // 脇の開きは肘付近に置くと分かりやすい
+    if (le) drawMarker(ctx, le.x * c.width - 20, le.y * c.height - 10, "③");
+    if (re) drawMarker(ctx, re.x * c.width + 20, re.y * c.height - 10, "④");
+
+    // 肩・股関節の中点
+    const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+    const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+
+    // 体幹ベクトル（肩→股関節）
+    const trunkVec = { x: hipMid.x - shoulderMid.x, y: hipMid.y - shoulderMid.y };
+
+    // 上腕ベクトル（肩→肘）
+    const leftArmVec = { x: le.x - ls.x, y: le.y - ls.y };
+    const rightArmVec = { x: re.x - rs.x, y: re.y - rs.y };
+
+    // 角度（0〜180）
+    const leftDeg = angleBetween(trunkVec, leftArmVec);
+    const rightDeg = angleBetween(trunkVec, rightArmVec);
+
+    if (leftDeg == null || rightDeg == null) {
+      setMsg("角度計算に失敗しました（点が不安定な可能性）");
+      return;
+    }
+
+    // 開き角の目安（直感的にしたい場合）
+    const leftOpenDeg = 180 - leftDeg;
+    const rightOpenDeg = 180 - rightDeg;
+
+    // ログ出し
+    console.log("pose landmarks:", landmarks);
+    console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
+    console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
+    console.log("左脇の開き(目安):", leftOpenDeg.toFixed(1));
+    console.log("右脇の開き(目安):", rightOpenDeg.toFixed(1));
+
+    // 画面表示
+    setAngles({
+      leftDeg,
+      rightDeg,
+      leftOpenDeg,
+      rightOpenDeg,
     });
 
-    // 結果表示（summary / todayFocus / details がそのまま使える）
-    setResult({
-      summary: data.summary,
-      todayFocus: data.todayFocus,
-      details: {
-        planting: data.details?.planting || {
-          reason: "—",
-          impact: "—",
-          drill: "—",
-        },
-        takeoff: data.details?.takeoff || {
-          reason: "—",
-          impact: "—",
-          drill: "—",
-        },
-        drive: data.details?.drive || {
-          reason: "—",
-          impact: "—",
-          drill: "—",
-        },
-        inversion: data.details?.inversion || {
-          reason: "—",
-          impact: "—",
-          drill: "—",
-        },
-      },
-    });
-
-    setStatus("done");
-
+    setMsg("✅ 推定完了（次はここに描画を追加していこう）");
   };
 
   return (
     <div style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
       <h1 style={{ marginBottom: 6 }}>棒高跳び フォーム診断</h1>
-      <p style={{ marginTop: 0, marginBottom: 18 }}>動画1本で、今の跳びをチェック</p>
+      <p style={{ marginTop: 0, marginBottom: 18 }}>動画をコマ送り → キャプチャ → 骨格推定</p>
 
-      {/* 撮影ガイド（最小） */}
-      <details style={{ marginBottom: 14 }}>
-        <summary style={{ cursor: "pointer" }}>撮影ガイド</summary>
-        <div style={{ marginTop: 10, lineHeight: 1.7 }}>
-          <div>・横から撮影してください</div>
-          <div>・助走の途中から反転まで映るようにしてください</div>
-          <div>・体とポール全体がフレーム内に入ると診断が安定します</div>
-        </div>
-      </details>
-
-      {/* アップロード */}
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
-        <input type="file" accept="video/*" onChange={onFileChange} />
-        <button disabled={!canDiagnose || status === "checking" || status === "analyzing"} onClick={runCheckAndDiagnose}>
-          診断する
-        </button>
-        {(status === "checking" || status === "analyzing") && <span>処理中…</span>}
-      </div>
-
-      {/* チェックメッセージ */}
-      {checkResult?.message && (
+      {/* ステータス */}
+      {msg && (
         <div
           style={{
             whiteSpace: "pre-line",
@@ -325,109 +370,98 @@ export default function PoleVaultDiagnosis() {
             marginBottom: 12,
           }}
         >
-          {checkResult.message}
+          {msg}
         </div>
       )}
 
+      {/* アップロード */}
+      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <input type="file" accept="video/*" onChange={onFileChange} />
+        <span style={{ fontSize: 12, opacity: 0.8 }}>
+          骨格推定: {poseReady ? "OK" : "準備中"}
+        </span>
+      </div>
+
       {/* 動画プレビュー */}
       {videoUrl && (
-        <div style={{ marginBottom: 18 }}>
+        <div style={{ marginBottom: 12 }}>
           <video
             ref={videoRef}
             src={videoUrl}
             controls
             style={{ width: "100%", maxWidth: 720, borderRadius: 12, border: "1px solid #eee" }}
-            onLoadedMetadata={onLoadedMetadata}
             onTimeUpdate={() => {
               const v = videoRef.current;
               if (!v) return;
               setCurrentTime(v.currentTime);
             }}
           />
-          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-            参考：{meta.width}×{meta.height} / {meta.duration ? `${meta.duration.toFixed(2)}s` : "-"} / FPS：{meta.fps ?? "（未取得）"}
-          </div>
         </div>
       )}
 
+      {/* コマ送り＆キャプチャ */}
       {videoUrl && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-          <button onClick={() => nudge(-0.10)}>◀︎ -0.10s</button>
+          <button onClick={() => nudge(-0.1)}>◀︎ -0.10s</button>
           <button onClick={() => nudge(-0.03)}>◀︎ -0.03s</button>
+
           <div style={{ fontSize: 12, opacity: 0.8 }}>
             現在: {currentTime.toFixed(2)}s
           </div>
-          <button onClick={() => nudge(0.03)}>+0.03s ▶︎</button>
-          <button onClick={() => nudge(0.10)}>+0.10s ▶︎</button>
-          <button onClick={captureFrame}>この瞬間をキャプチャ</button>
 
-          {/* 画面に出さないcanvas（キャプチャ用） */}
-          <canvas ref={canvasRef} style={{ display: "none" }} />
+          <button onClick={() => nudge(0.03)}>+0.03s ▶︎</button>
+          <button onClick={() => nudge(0.1)}>+0.10s ▶︎</button>
+
+          <button onClick={captureFrameAndEstimate} disabled={!poseReady}>
+            この瞬間をキャプチャ（推定）
+          </button>
+
+          {/* キャプチャ用（非表示） */}
+          <canvas ref={captureCanvasRef} style={{ display: "none" }} />
         </div>
       )}
 
+      {/* 角度表示 */}
+      {(angles.leftDeg != null || angles.rightDeg != null) && (
+        <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, maxWidth: 720, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>角度（キャプチャ時点）</div>
+          <div style={{ fontSize: 14, lineHeight: 1.7 }}>
+            ・①体幹×左上腕（なす角）: {angles.leftDeg?.toFixed(1)}°
+            <br />
+            ・②体幹×右上腕（なす角）: {angles.rightDeg?.toFixed(1)}°
+            <br />
+            ・③左脇の開き（目安）: {angles.leftOpenDeg?.toFixed(1)}°
+            <br />
+            ・④右脇の開き（目安）: {angles.rightOpenDeg?.toFixed(1)}°
+          </div>
+        </div>
+      )}
+
+      {/* キャプチャ画像 */}
       {capturedUrl && (
         <div style={{ marginTop: 12 }}>
           <h3 style={{ marginBottom: 8 }}>キャプチャ画像</h3>
-          <img
-            src={capturedUrl}
-            alt="captured"
-            style={{ width: "100%", maxWidth: 720, borderRadius: 12, border: "1px solid #eee" }}
-          />
+          <div style={{ position: "relative", width: "100%", maxWidth: 720 }}>
+            <img
+              src={capturedUrl}
+              onLoad={() => poseLandmarks && drawPoseOnOverlay(poseLandmarks)}
+              alt="captured"
+              style={{ width: "100%", borderRadius: 12, border: "1px solid #eee", display: "block" }}
+            />
+            <canvas
+              ref={overlayCanvasRef}
+              style={{
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+                borderRadius: 12,
+              }}
+            />
+          </div>
         </div>
-      )}
-
-      {/* 結果 */}
-      {result && (
-        <>
-          <h2 style={{ marginBottom: 8 }}>診断結果</h2>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12 }}>
-              植え込みタイミング：{LABEL[result.summary.planting]}
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12 }}>
-              踏切 × ポール角：{LABEL[result.summary.takeoff]}
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12 }}>
-              離陸の突っ込み：{LABEL[result.summary.drive]}
-            </div>
-            <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12 }}>
-              反転タイミング：{LABEL[result.summary.inversion]}
-            </div>
-          </div>
-
-          <div style={{ padding: 14, border: "1px solid #ddd", borderRadius: 14, marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>今日の改善ポイント</div>
-            <div style={{ marginBottom: 8 }}>{result.todayFocus.title}</div>
-            <div>
-              次の1本は<br />
-              「{result.todayFocus.advice}」
-            </div>
-          </div>
-
-          <button onClick={() => setShowDetails((v) => !v)} style={{ marginBottom: 10 }}>
-            {showDetails ? "詳細を閉じる" : "詳しく見る"}
-          </button>
-
-          {showDetails && (
-            <div style={{ display: "grid", gap: 12 }}>
-              {[
-                ["planting", "植え込みタイミング"],
-                ["takeoff", "踏切 × ポール角"],
-                ["drive", "離陸の突っ込み"],
-                ["inversion", "反転タイミング"],
-              ].map(([key, title]) => (
-                <div key={key} style={{ padding: 12, border: "1px solid #eee", borderRadius: 12 }}>
-                  <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
-                  <div style={{ marginBottom: 6 }}>なぜ？：{result.details[key].reason}</div>
-                  <div style={{ marginBottom: 6 }}>このままだと？：{result.details[key].impact}</div>
-                  <div>おすすめ練習：{result.details[key].drill}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
       )}
     </div>
   );
