@@ -1,27 +1,91 @@
 import { useEffect, useRef, useState } from "react";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 
-// ★ import の下（angleBetweenの近く）に追加
-function drawMarker(ctx, x, y, label) {
-  ctx.save();
+// 角度を -PI..PI に正規化
+function normRad(a) {
+  while (a <= -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
+}
 
-  const padding = 6;
+// 扇形（角度弧）を描く：centerを頂点に vecA と vecB のなす角を描画
+function drawAngleWedge(ctx, center, vecA, vecB, radius, label, opt = {}) {
+  const {
+    fill = "rgba(255, 255, 0, 0.18)",
+    stroke = "rgba(255, 255, 0, 0.9)",
+    textColor = "white",
+  } = opt;
+
+  const a1 = Math.atan2(vecA.y, vecA.x);
+  const a2 = Math.atan2(vecB.y, vecB.x);
+
+  // 「短いほうの回り」で弧を描く（0〜180°側）
+  let delta = normRad(a2 - a1);
+  let start = a1;
+  let end = a1 + delta;
+
+  // 180°より大きくなったら逆側へ
+  if (Math.abs(delta) > Math.PI) {
+    delta = normRad(a1 - a2);
+    start = a2;
+    end = a2 + delta;
+  }
+
+  // 扇形
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(center.x, center.y);
+  ctx.arc(center.x, center.y, radius, start, end, delta < 0);
+  ctx.closePath();
+
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = Math.max(2, Math.round(radius / 10));
+  ctx.stroke();
+
+  // ラベル（扇形の中心寄り）
+  const mid = (start + end) / 2;
+  const tx = center.x + Math.cos(mid) * (radius + 14);
+  const ty = center.y + Math.sin(mid) * (radius + 14);
+
+  // 文字の可読性：黒フチ＋白文字
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(0,0,0,0.7)";
+  ctx.strokeText(label, tx, ty);
+  ctx.fillStyle = textColor;
+  ctx.fillText(label, tx, ty);
 
-  const textWidth = ctx.measureText(label).width;
-  const boxW = textWidth + padding * 2;
-  const boxH = 20;
+  ctx.restore();
+}
 
-  // 背景（半透明）
-  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+// ★ import の下（angleBetweenの近く）に追加
+function drawMarker(ctx, x, y, label, opt = {}) {
+  const r = opt.r ?? 14;
+
+  ctx.save();
+  ctx.globalAlpha = opt.alpha ?? 0.95;
+
+  // ●黒丸（背景）
   ctx.beginPath();
-  ctx.roundRect(x - boxW / 2, y - boxH / 2, boxW, boxH, 6);
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = opt.bg ?? "rgba(0,0,0,0.70)";
   ctx.fill();
 
-  // 文字
-  ctx.fillStyle = "white";
+  // ○白フチ
+  ctx.lineWidth = opt.borderW ?? 3;
+  ctx.strokeStyle = opt.border ?? "rgba(255,255,255,0.95)";
+  ctx.stroke();
+
+  // 文字（白）
+  ctx.fillStyle = opt.text ?? "white";
+  ctx.font = `bold ${opt.fontSize ?? 16}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
   ctx.fillText(label, x, y);
 
   ctx.restore();
@@ -59,8 +123,6 @@ export default function PoleVaultDiagnosis() {
   const [angles, setAngles] = useState({
     leftDeg: null, // 体幹×左上腕のなす角
     rightDeg: null,
-    leftOpenDeg: null, // 開き角の目安 = 180 - なす角
-    rightOpenDeg: null,
   });
 
   // 画面メッセージ
@@ -144,8 +206,6 @@ export default function PoleVaultDiagnosis() {
     setAngles({
       leftDeg: null,
       rightDeg: null,
-      leftOpenDeg: null,
-      rightOpenDeg: null,
     });
     setMsg(poseReady ? "キャプチャして推定できます" : "骨格推定モデルの準備中…");
   };
@@ -206,20 +266,23 @@ export default function PoleVaultDiagnosis() {
     if (!w || !h) return;
 
     const dpr = window.devicePixelRatio || 1;
-
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
 
     const ctx = canvas.getContext("2d");
 
-    // ★① まず transform を完全リセット
+    // ★① transform を完全リセット → ★② 内部解像度でクリア → ★③ CSS座標系へ
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    // ★② 内部解像度で完全クリア（これが黄色い帯対策）
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // ★③ 表示座標系（CSS px）に合わせる
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // 主要ランドマーク（★ここで1回だけ定義）
+    const ls = landmarks[11];
+    const rs = landmarks[12];
+    const le = landmarks[13];
+    const re = landmarks[14];
+    const lh = landmarks[23];
+    const rh = landmarks[24];
 
     // 線
     ctx.strokeStyle = "yellow";
@@ -241,16 +304,60 @@ export default function PoleVaultDiagnosis() {
       ctx.stroke();
     }
 
-    // マーカー
-    const ls = landmarks[11];
-    const rs = landmarks[12];
-    const le = landmarks[13];
-    const re = landmarks[14];
+    // ===== ①② 扇形（体幹×上腕） =====
+    if (ls && rs && lh && rh && le && re) {
+      const LS = { x: ls.x * w, y: ls.y * h };
+      const RS = { x: rs.x * w, y: rs.y * h };
+      const LE = { x: le.x * w, y: le.y * h };
+      const RE = { x: re.x * w, y: re.y * h };
 
-    if (ls) drawMarker(ctx, ls.x * w - 20, ls.y * h - 20, "①");
-    if (rs) drawMarker(ctx, rs.x * w + 20, rs.y * h - 20, "②");
-    if (le) drawMarker(ctx, le.x * w - 20, le.y * h - 10, "③");
-    if (re) drawMarker(ctx, re.x * w + 20, re.y * h - 10, "④");
+      const shoulderMid = { x: ((ls.x + rs.x) / 2) * w, y: ((ls.y + rs.y) / 2) * h };
+      const hipMid = { x: ((lh.x + rh.x) / 2) * w, y: ((lh.y + rh.y) / 2) * h };
+
+      const trunkVec = { x: hipMid.x - shoulderMid.x, y: hipMid.y - shoulderMid.y };
+      const leftArmVec = { x: LE.x - LS.x, y: LE.y - LS.y };
+      const rightArmVec = { x: RE.x - RS.x, y: RE.y - RS.y };
+
+      const radius = Math.max(22, Math.round(w / 18));
+
+      drawAngleWedge(ctx, LS, trunkVec, leftArmVec, radius, "①", {
+        fill: "rgba(76, 201, 240, 0.22)",
+        stroke: "rgba(76, 201, 240, 0.95)",
+      });
+
+      drawAngleWedge(ctx, RS, trunkVec, rightArmVec, radius, "②", {
+        fill: "rgba(76, 201, 240, 0.22)",
+        stroke: "rgba(76, 201, 240, 0.95)",
+      });
+    }
+
+    // ③④：肘の外側に逃がす（被りにくい）
+    if (ls && le) {
+      const dx = le.x - ls.x;
+      const dy = le.y - ls.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+
+      const off = Math.max(18, Math.round(w / 60)); // 画面サイズで調整
+      const mx = le.x * w + ux * off;
+      const my = le.y * h + uy * off;
+
+    }
+
+    if (rs && re) {
+      const dx = re.x - rs.x;
+      const dy = re.y - rs.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+
+      const off = Math.max(18, Math.round(w / 60));
+      const mx = re.x * w + ux * off;
+      const my = re.y * h + uy * off;
+
+    }
+
   }
 
   // キャプチャ＆推定＆角度計算（ログ＋画面表示）
@@ -308,10 +415,6 @@ export default function PoleVaultDiagnosis() {
     const lh = landmarks[23]; // left hip
     const rh = landmarks[24]; // right hip
 
-    // 脇の開きは肘付近に置くと分かりやすい
-    if (le) drawMarker(ctx, le.x * c.width - 20, le.y * c.height - 10, "③");
-    if (re) drawMarker(ctx, re.x * c.width + 20, re.y * c.height - 10, "④");
-
     // 肩・股関節の中点
     const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
     const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
@@ -332,23 +435,15 @@ export default function PoleVaultDiagnosis() {
       return;
     }
 
-    // 開き角の目安（直感的にしたい場合）
-    const leftOpenDeg = 180 - leftDeg;
-    const rightOpenDeg = 180 - rightDeg;
-
-    // ログ出し
+        // ログ出し
     console.log("pose landmarks:", landmarks);
     console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
     console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
-    console.log("左脇の開き(目安):", leftOpenDeg.toFixed(1));
-    console.log("右脇の開き(目安):", rightOpenDeg.toFixed(1));
 
     // 画面表示
     setAngles({
       leftDeg,
       rightDeg,
-      leftOpenDeg,
-      rightOpenDeg,
     });
 
     setMsg("✅ 推定完了（次はここに描画を追加していこう）");
@@ -430,9 +525,6 @@ export default function PoleVaultDiagnosis() {
             <br />
             ・②体幹×右上腕（なす角）: {angles.rightDeg?.toFixed(1)}°
             <br />
-            ・③左脇の開き（目安）: {angles.leftOpenDeg?.toFixed(1)}°
-            <br />
-            ・④右脇の開き（目安）: {angles.rightOpenDeg?.toFixed(1)}°
           </div>
         </div>
       )}

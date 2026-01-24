@@ -11,6 +11,7 @@ import RequireAuth from "./auth/RequireAuth";
 import Login from "./pages/Login";
 import Success from "./pages/Success";
 import Cancel from "./pages/Cancel";
+import Refund from "./pages/Refund";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/confirm" element={<Confirm />} />
       <Route path="/success" element={<Success />} />
       <Route path="/cancel" element={<Cancel />} />
+      <Route path="/refund" element={<Refund />} />
 
       {/* ランニングフォーム比較：ログイン必須 */}
       <Route
