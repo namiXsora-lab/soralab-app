@@ -59,7 +59,7 @@ export default function Refund() {
           </p>
 
           <button
-            onClick={goToCancelManage}
+            onClick={() => navigate("/portal")}
             style={{
               marginTop: 6,
               width: "100%",

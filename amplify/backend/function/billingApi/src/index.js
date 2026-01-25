@@ -156,6 +156,45 @@ exports.handler = async (event) => {
       path.endsWith("/checkout") ||
       path.endsWith("/subscription") ||
       path.endsWith("/polevault/diagnose");
+    // ====== 追加：/portal（Customer Portal URL 発行） ======
+    if (path.endsWith("/portal")) {
+      const userSub = getUserSub(event);
+      if (!userSub) {
+        return {
+          statusCode: 401,
+          headers,
+          body: JSON.stringify({ message: "Unauthorized (no userSub)" }),
+        };
+      }
+
+      const tableName = process.env.SUBSCRIPTIONS_TABLE;
+      const res = await ddb.get({ TableName: tableName, Key: { userSub } }).promise();
+      const item = res.Item;
+
+      const customerId = item?.stripeCustomerId;
+      if (!customerId) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ message: "No stripeCustomerId yet" }),
+        };
+      }
+
+      const returnUrl =
+        process.env.PORTAL_RETURN_URL ||
+        "https://main.d3sy4qro8vglws.amplifyapp.com/";
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ url: portalSession.url }),
+      };
+    }
 
     if (!okPath) {
       return { statusCode: 404, headers, body: JSON.stringify({ message: "Not Found" }) };
