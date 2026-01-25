@@ -5,23 +5,20 @@ import { fetchAuthSession } from "aws-amplify/auth";
 export default function Refund() {
   const navigate = useNavigate();
 
-  // ✅ ここは後で「Stripe Customer Portal」へ差し替える（まずはログイン導線だけ作る）
   const goToCancelManage = async () => {
     try {
       const session = await fetchAuthSession();
       const token = session.tokens?.accessToken?.toString();
 
       if (!token) {
-        navigate("/login");
+        navigate("/login?next=/portal"); // ✅ ログイン後にPortalへ
         return;
       }
 
-      // いったん：ログイン後はトップに戻す（次のステップで Customer Portal を開く）
-      alert("次のステップで「解約ページ（Customer Portal）」を開けるようにします。");
-      navigate("/");
+      navigate("/portal"); // ✅ ログイン済みならPortalへ
     } catch (e) {
       console.error(e);
-      navigate("/login");
+      navigate("/login?next=/portal");
     }
   };
 
@@ -59,7 +56,7 @@ export default function Refund() {
           </p>
 
           <button
-            onClick={() => navigate("/portal")}
+            onClick={goToCancelManage}  // ✅ ここがポイント
             style={{
               marginTop: 6,
               width: "100%",

@@ -53,6 +53,7 @@ exports.handler = async (event) => {
     "Access-Control-Allow-Origin": "https://main.d3sy4qro8vglws.amplifyapp.com",
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
     "Content-Type": "application/json",
   };
 

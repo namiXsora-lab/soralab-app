@@ -5,7 +5,13 @@ import { signIn, signOut, resetPassword, confirmResetPassword } from "aws-amplif
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from || "/form-compare";
+
+  const next =
+    new URLSearchParams(location.search).get("next") ||
+    location.state?.from ||
+    "/form-compare";
+
+  const from = next;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,17 +24,6 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [info, setInfo] = useState("");
-
-  // ✅ すでにログインしてたら一旦ログアウト（例のエラー対策）
-  useEffect(() => {
-    (async () => {
-      try {
-        await signOut();
-      } catch {
-        // 未ログインなら何もしない
-      }
-    })();
-  }, []);
 
   const onLogin = async () => {
     setErr("");
