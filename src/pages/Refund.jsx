@@ -7,18 +7,43 @@ export default function Refund() {
 
   const goToCancelManage = async () => {
     try {
+      // 1) ログインセッションからトークン取得
       const session = await fetchAuthSession();
-      const token = session.tokens?.accessToken?.toString();
+      const token = session.tokens?.accessToken?.toString(); // ← accessTokenでOK
 
       if (!token) {
-        navigate("/login?next=/portal"); // ✅ ログイン後にPortalへ
+        navigate("/login?next=/refund"); // ログイン後はRefundに戻す方が安全
         return;
       }
 
-      navigate("/portal"); // ✅ ログイン済みならPortalへ
+      // 2) API Gateway の /portal を Bearer付きで呼ぶ
+      const baseUrl = import.meta.env.VITE_API_BASE_URL; // 例: https://xxxx.execute-api.../dev
+      const res = await fetch(`${baseUrl}/portal`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        console.error("portal api error", res.status, data);
+        // 認可がまだならログインに戻す（401対策）
+        if (res.status === 401) navigate("/login?next=/refund");
+        return;
+      }
+
+      if (!data.url) {
+        console.error("portal api: url not found", data);
+        return;
+      }
+
+      // 3) Stripe Customer Portalへ遷移
+      window.location.href = data.url;
     } catch (e) {
       console.error(e);
-      navigate("/login?next=/portal");
+      navigate("/login?next=/refund");
     }
   };
 
@@ -56,7 +81,7 @@ export default function Refund() {
           </p>
 
           <button
-            onClick={goToCancelManage}  // ✅ ここがポイント
+            onClick={goToCancelManage}
             style={{
               marginTop: 6,
               width: "100%",
@@ -72,9 +97,7 @@ export default function Refund() {
             解約・お支払い管理へ（ログインが必要）
           </button>
 
-          <p style={{ marginTop: 10, fontSize: 12, color: "#666" }}>
-            ※まずログインしてからご利用ください
-          </p>
+          <p style={{ marginTop: 10, fontSize: 12, color: "#666" }}>※まずログインしてからご利用ください</p>
         </div>
       </div>
     </div>
