@@ -8,6 +8,9 @@ export default function Refund() {
   const goToCancelManage = async () => {
     try {
       // 1) ログインセッションからトークン取得
+      console.log("VITE_API_BASE_URL=", import.meta.env.VITE_API_BASE_URL);
+      console.log("Calling URL=", `${import.meta.env.VITE_API_BASE_URL}/portal`);
+
       const session = await fetchAuthSession();
       const token = session.tokens?.accessToken?.toString(); // ← accessTokenでOK
 

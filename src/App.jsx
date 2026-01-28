@@ -1,3 +1,6 @@
+console.log("VITE_API_BASE_URL=", import.meta.env.VITE_API_BASE_URL);
+window.__VITE_API_BASE_URL__ = import.meta.env.VITE_API_BASE_URL;
+
 import { Routes, Route, Navigate } from "react-router-dom";
 import Signup from "./pages/Signup";
 import Confirm from "./pages/Confirm";
