@@ -133,6 +133,11 @@ exports.handler = async (event) => {
           break;
         }
 
+        const currentPeriodEndUnix = obj?.current_period_end ? Number(obj.current_period_end) : null;
+        const currentPeriodEndIso = currentPeriodEndUnix
+          ? new Date(currentPeriodEndUnix * 1000).toISOString()
+          : null;
+
         const stripeSubscriptionId = obj?.id || null;
         const stripeCustomerId = typeof obj?.customer === "string" ? obj.customer : obj?.customer?.id;
 
@@ -157,7 +162,9 @@ exports.handler = async (event) => {
           stripeCustomerId: stripeCustomerId || null,
           stripeSubscriptionId,
           cancelAtPeriodEnd: !!obj?.cancel_at_period_end,
-          currentPeriodEnd: obj?.current_period_end ? Number(obj.current_period_end) : null, // unix秒
+          // ✅ 追加/変更ここ
+          currentPeriodEnd: currentPeriodEndIso,          // ← 文字列で保存（見やすい）
+          currentPeriodEndUnix: currentPeriodEndUnix,     // ← 数値も残す（計算しやすい）
         });
 
         break;
