@@ -219,6 +219,58 @@ exports.handler = async (event) => {
       };
     }
 
+    // ====== 追加：二重課金防止（すでに契約中ならPortalへ） ======
+    const tableName = process.env.SUBSCRIPTIONS_TABLE;
+    if (!tableName) {
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ message: "Missing env SUBSCRIPTIONS_TABLE" }),
+      };
+    }
+
+    const subRes = await ddb
+      .get({
+        TableName: tableName,
+        Key: { userSub },
+      })
+      .promise();
+
+    const current = subRes.Item || null;
+
+    if (isStillActiveSubscription(current)) {
+      // すでに契約中（または解約予約で期間内） → Checkoutを作らない
+      const customerId = current?.stripeCustomerId;
+      if (!customerId) {
+        return {
+          statusCode: 409,
+          headers,
+          body: JSON.stringify({
+            message: "Already subscribed, but stripeCustomerId is missing in DB.",
+            subscription: current,
+          }),
+        };
+      }
+
+      const returnUrl =
+        process.env.PORTAL_RETURN_URL ||
+        "https://main.d3sy4qro8vglws.amplifyapp.com/";
+
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          url: portalSession.url,
+          alreadySubscribed: true,
+        }),
+      };
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
@@ -242,6 +294,23 @@ exports.handler = async (event) => {
     };
   }
 };
+
+function isStillActiveSubscription(item) {
+  if (!item) return false;
+
+  // Stripeの状態を優先（active / trialing）
+  const stripeActive = item.stripeStatus === "active" || item.stripeStatus === "trialing";
+
+  // アプリ側の状態（あなたの既存ロジックに合わせる）
+  const appActive = item.isPaid === true && item.status === "active";
+
+  // 「解約予約中（cancel_at_period_end）」でも、期間末までは有効扱いにしたい
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const periodEndUnix = typeof item.currentPeriodEndUnix === "number" ? item.currentPeriodEndUnix : null;
+  const stillInPaidPeriod = item.cancelAtPeriodEnd === true && periodEndUnix && periodEndUnix > nowUnix;
+
+  return stripeActive || appActive || stillInPaidPeriod;
+}
 
 function checkVideo(meta) {
   const { duration, width, height, fps } = meta || {};
@@ -268,55 +337,4 @@ function checkVideo(meta) {
     };
   }
   return { checkStatus: "ok", message: "動画を確認しました。フォーム診断を開始します。" };
-}
-
-function diagnoseDummy(meta) {
-  const seed =
-    (meta.duration || 0) * 1000 +
-    (meta.fps || 0) * 10 +
-    (meta.width || 0) +
-    (meta.height || 0);
-
-  const r = (k) => {
-    const x = Math.sin(seed * (k + 1)) * 10000;
-    return x - Math.floor(x);
-  };
-
-  const pick = (x) => {
-    if (x < 0.25) return "bad";
-    if (x < 0.60) return "ok";
-    return "good";
-  };
-
-  const summary = {
-    planting: pick(r(1)),
-    takeoff: pick(r(2)),
-    drive: pick(r(3)),
-    inversion: pick(r(4)),
-  };
-
-  const order = ["drive", "planting", "takeoff", "inversion"];
-  const titleMap = {
-    planting: { good: "植え込みタイミング：適切", ok: "植え込みタイミング：やや早い", bad: "植え込みタイミング：早すぎ", advice: "助走リズムに合わせて植え込みを遅らせる意識" },
-    takeoff: { good: "踏切×ポール角：安定", ok: "踏切×ポール角：やや不安定", bad: "踏切×ポール角：不安定", advice: "踏切位置を一定に（目印を作る）" },
-    drive: { good: "離陸の突っ込み：十分", ok: "離陸の突っ込み：やや不足", bad: "離陸の突っ込み：不足", advice: "踏切後も前に進む意識（引き上げを急がない）" },
-    inversion: { good: "反転タイミング：適切", ok: "反転タイミング：やや早い", bad: "反転タイミング：早すぎ", advice: "ポールの戻りを待ってから反転に入る意識" },
-  };
-
-  const focusKey =
-    order.find((k) => summary[k] === "bad") ||
-    order.find((k) => summary[k] === "ok") ||
-    "drive";
-
-  const focus = titleMap[focusKey];
-  const todayFocus = { title: focus[summary[focusKey]], advice: focus.advice };
-
-  const details = {
-    planting: { reason: "助走と植え込みの同期を見る項目です。", impact: "タイミングが合うと、踏切の力がポールに素直に伝わります。", drill: "助走の最後3歩を一定リズムで（動画でリズム確認）" },
-    takeoff: { reason: "踏切位置とポール角の安定性を見る項目です。", impact: "ズレが減るほど、跳びが再現しやすくなります。", drill: "踏切位置にテープで目印（同じ位置で踏めるか）" },
-    drive: { reason: "離陸直後に前へ進むエネルギーが残っているかを見る項目です。", impact: "突っ込みが出るほど、ポールへエネルギーを乗せやすくなります。", drill: "踏切後に“前を見る”意識で、引き上げを急がない" },
-    inversion: { reason: "反転がポールの戻りと同期しているかを見る項目です。", impact: "同期すると、抜けで高さを作りやすくなります。", drill: "反転は“待ってから”入る（慌てて先に回らない）" },
-  };
-
-  return { summary, todayFocus, details };
 }
