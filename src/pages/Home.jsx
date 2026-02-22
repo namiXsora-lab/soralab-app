@@ -1,27 +1,36 @@
 import { goToCheckout } from "../checkout";
 import "../App.css";
 import { useNavigate, Link } from "react-router-dom";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth"; // ★追加
 
 export default function Home() {
   const navigate = useNavigate();
 
+  // ★ログイン済みの時だけ token を返す（未ログインなら null）
+  const getAccessTokenIfLoggedIn = async () => {
+    try {
+      await getCurrentUser(); // ★未ログインならここで例外になる
+      const session = await fetchAuthSession();
+      return session.tokens?.accessToken?.toString() ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const requireLogin = async () => {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.accessToken?.toString();
+    const token = await getAccessTokenIfLoggedIn();
     if (!token) {
       navigate("/login", { state: { from: "/form-compare" } });
-      return;
+      return null;
     }
     return token;
   };
 
   const goToFormCompare = async () => {
     try {
-      const session = await fetchAuthSession();
-      const token = session.tokens?.accessToken?.toString();
+      const token = await getAccessTokenIfLoggedIn();
 
-      // ★未ログインは必ずログインへ
+      // ★未ログインは必ずログインへ（fetchAuthSessionを無理に叩かない）
       if (!token) {
         navigate("/login", { state: { from: "/form-compare" } });
         return;
@@ -32,7 +41,6 @@ export default function Home() {
         { method: "GET", headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // ★401/403はログインへ（セッション切れ・トークン不整合の可能性）
       if (res.status === 401 || res.status === 403) {
         navigate("/login", { state: { from: "/form-compare" } });
         return;
@@ -44,7 +52,7 @@ export default function Home() {
       if (res.ok && isActive) {
         navigate("/form-compare");
       } else {
-        goToCheckout(); // ★ここで初めて決済へ
+        goToCheckout();
       }
     } catch (e) {
       console.error(e);
@@ -66,6 +74,7 @@ export default function Home() {
   return (
     <div className="sl-page">
       <main className="sl-shell">
+        {/* 以降は変更なし */}
         <header className="sl-header">
           <div className="sl-mark" aria-hidden>
             <span className="sl-cloud" />
