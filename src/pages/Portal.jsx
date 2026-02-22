@@ -2,7 +2,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
-import { get } from "aws-amplify/api";
 
 export default function Portal() {
   const navigate = useNavigate();
@@ -10,41 +9,45 @@ export default function Portal() {
   useEffect(() => {
     (async () => {
       try {
-        // 1) ログインチェック（未ログインならログインへ）
+        // 1) 未ログインならログインへ
         try {
-          await getCurrentUser(); // ★未ログインならここで例外
+          await getCurrentUser();
         } catch {
-          navigate("/login");
+          navigate("/login", { state: { from: "/portal" } });
           return;
         }
 
-        // 2) トークン取得（ログイン済みの場合のみ）
+        // 2) JWT取得
         const session = await fetchAuthSession();
         const token = session.tokens?.accessToken?.toString();
         if (!token) {
-          navigate("/login");
+          navigate("/login", { state: { from: "/portal" } });
           return;
         }
 
-        // 3) Customer PortalのURLをサーバ側で発行してもらう
-        const resp = await get({
-          apiName: "billingApi",
-          path: "/portal",
-          options: { authMode: "userPool" },
-        }).response;
+        // 3) /portal をJWT付きで叩く（JWT Authorizer用）
+        const baseUrl = import.meta.env.VITE_API_BASE_URL; // 例: https://...amazonaws.com/dev
+        const res = await fetch(`${baseUrl}/portal`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-        const data = JSON.parse(await resp.body.text());
+        if (res.status === 401 || res.status === 403) {
+          navigate("/login", { state: { from: "/portal" } });
+          return;
+        }
 
-        if (data?.url) {
-          window.location.href = data.url; // Stripeへ遷移
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data?.url) {
+          window.location.href = data.url;
         } else {
-          alert("ポータルURLの取得に失敗しました。");
+          alert(data?.message || "ポータルURLの取得に失敗しました。");
           navigate("/");
         }
       } catch (e) {
         console.error(e);
         alert("エラーが出ました。もう一度ログインして試してください。");
-        navigate("/login");
+        navigate("/login", { state: { from: "/portal" } });
       }
     })();
   }, [navigate]);

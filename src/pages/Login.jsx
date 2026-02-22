@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { signIn, signOut, resetPassword, confirmResetPassword } from "aws-amplify/auth";
+import { signIn, signOut, resetPassword, confirmResetPassword, getCurrentUser } from "aws-amplify/auth";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -31,6 +31,13 @@ export default function Login() {
     console.log("LOGIN CLICK", { email });
 
     try {
+      try {
+        await getCurrentUser();
+        navigate(from, { replace: true });
+        return;
+      } catch {
+        // 未ログインなら通常ログインへ
+      }
       const res = await signIn({ username: email, password });
       console.log("SIGNIN OK", res);
       navigate(from, { replace: true });
