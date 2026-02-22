@@ -1,7 +1,7 @@
 // src/pages/Portal.jsx
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
 import { get } from "aws-amplify/api";
 
 export default function Portal() {
@@ -11,6 +11,14 @@ export default function Portal() {
     (async () => {
       try {
         // 1) ログインチェック（未ログインならログインへ）
+        try {
+          await getCurrentUser(); // ★未ログインならここで例外
+        } catch {
+          navigate("/login");
+          return;
+        }
+
+        // 2) トークン取得（ログイン済みの場合のみ）
         const session = await fetchAuthSession();
         const token = session.tokens?.accessToken?.toString();
         if (!token) {
@@ -18,7 +26,7 @@ export default function Portal() {
           return;
         }
 
-        // 2) Customer PortalのURLをサーバ側で発行してもらう
+        // 3) Customer PortalのURLをサーバ側で発行してもらう
         const resp = await get({
           apiName: "billingApi",
           path: "/portal",
