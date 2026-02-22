@@ -19,7 +19,10 @@ export default function Portal() {
 
         // 2) JWT取得
         const session = await fetchAuthSession();
-        const token = session.tokens?.accessToken?.toString();
+        const token =
+          session.tokens?.idToken?.toString() ||          // ★まず idToken
+          session.tokens?.accessToken?.toString() || "";  // ★なければ accessToken
+
         if (!token) {
           navigate("/login", { state: { from: "/portal" } });
           return;
