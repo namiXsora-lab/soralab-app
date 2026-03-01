@@ -145,12 +145,6 @@ export default function Home() {
           </div>
         </section>
 
-        <div style={{ marginTop: 10, textAlign: "center" }}>
-          <Link className="sl-link" to="/polevault">
-            棒高跳びフォーム診断（無料・試作）
-          </Link>
-        </div>
-
         <footer className="sl-footer">
           <a className="sl-link" href="/tokushoho">特定商取引法に基づく表記</a>
           <span className="sl-dot">•</span>
