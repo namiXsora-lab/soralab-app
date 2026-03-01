@@ -108,6 +108,12 @@ export default function Home() {
               <Link
                 className="sl-btn sl-btnPrimary"
                 to="/polevault"
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  width: "100%",
+                }}
               >
                 棒高跳びフォーム診断アプリへ
               </Link>
