@@ -63,12 +63,14 @@ export default function FormCompare() {
         <h2>有料プランが必要です</h2>
         <p>月額¥500のサブスクに登録すると利用できます。</p>
 
-        <button onClick={() => navigate("/", { replace: true })}>
-          トップへ戻る
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={() => navigate("/", { replace: true })}>
+            トップへ戻る
+          </button>
 
-        <div style={{ marginTop: 12 }}>
-          <button onClick={logout}>ログアウト</button>
+          <button onClick={logout}>
+            ログアウト
+          </button>
         </div>
       </div>
     );
@@ -76,12 +78,17 @@ export default function FormCompare() {
 
   return (
     <div>
-      <div style={{ padding: 8 }}>
-        <button onClick={logout}>ログアウト</button>
+      <div style={{ padding: 8, display: "flex", gap: 8 }}>
+        <button onClick={() => navigate("/")}>
+          ホームへ戻る
+        </button>
+
+        <button onClick={logout}>
+          ログアウト
+        </button>
       </div>
 
       <MainFormApp />
     </div>
   );
 }
-
