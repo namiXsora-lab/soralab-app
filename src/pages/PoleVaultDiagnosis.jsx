@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { useNavigate } from "react-router-dom";
 
 // 角度を -PI..PI に正規化
 function normRad(a) {
@@ -106,6 +107,7 @@ function angleBetween(v1, v2) {
 
 export default function PoleVaultDiagnosis() {
   const videoRef = useRef(null);
+  const navigate = useNavigate();
 
   // キャプチャ用（非表示）
   const captureCanvasRef = useRef(null);
@@ -435,7 +437,7 @@ export default function PoleVaultDiagnosis() {
       return;
     }
 
-        // ログ出し
+    // ログ出し
     console.log("pose landmarks:", landmarks);
     console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
     console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
@@ -451,6 +453,23 @@ export default function PoleVaultDiagnosis() {
 
   return (
     <div style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
+
+      {/* ★追加：ホームへ戻る */}
+      <div style={{ marginBottom: 12 }}>
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            padding: "6px 12px",
+            borderRadius: 6,
+            border: "1px solid #ccc",
+            background: "white",
+            cursor: "pointer",
+          }}
+        >
+          ← ホームへ戻る
+        </button>
+      </div>
+
       <h1 style={{ marginBottom: 6 }}>棒高跳び フォーム診断</h1>
       <p style={{ marginTop: 0, marginBottom: 18 }}>動画をコマ送り → キャプチャ → 骨格推定</p>
 
