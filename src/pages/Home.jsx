@@ -96,22 +96,41 @@ export default function Home() {
               いつもの分析へ。今日の状態に合わせて、無理なく進めましょう。
             </p>
 
-            <button className="sl-btn sl-btnPrimary" onClick={goToFormCompare}>
-              フォーム比較アプリへ
+            {/* メイン：ランニング */}
+            <button
+              className="sl-btn sl-btnPrimary"
+              onClick={goToFormCompare}
+            >
+              ランニングフォーム診断アプリへ
             </button>
 
-            <p className="sl-note">※契約状況の確認は次のステップでつなぎます</p>
+            {/* ★追加：棒高跳び */}
+            <div style={{ marginTop: 12 }}>
+              <Link
+                className="sl-btn sl-btnGhost"
+                to="/polevault"
+              >
+                棒高跳びフォーム診断（無料）
+              </Link>
+            </div>
+
+            <p className="sl-note">
+              ※契約状況の確認は次のステップでつなぎます
+            </p>
           </div>
 
           <div className="sl-card">
             <h2 className="sl-cardTitle">はじめての方</h2>
             <p className="sl-cardText">
-              月額¥500で、フォーム比較を含む分析サービスが利用できます。
+              月額¥500で、ランニングフォーム診断を含む分析サービスが利用できます。
               <br />
               まずは安心してお試しください。
             </p>
 
-            <button className="sl-btn sl-btnGhost" onClick={startSubscription}>
+            <button
+              className="sl-btn sl-btnGhost"
+              onClick={startSubscription}
+            >
               月額サービスをはじめる
             </button>
 
