@@ -125,6 +125,14 @@
   font-size: 16px;
   font-weight: 700;
   cursor: pointer;
+
+  /* ★これを追加 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-decoration: none;
+  box-sizing: border-box;
+
   transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
 }
 
