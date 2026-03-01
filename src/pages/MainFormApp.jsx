@@ -661,25 +661,6 @@ export default function MainFormApp() {
           <li><b>テンポ（ケイデンス）</b>：1分あたりの歩数。音楽のBPMのように走るテンポを表します。</li>
         </ul>
       </div>
-
-      {/* ▼ Stripe 決済ボタンを追加 ▼ */}
-      <button 
-        style={{
-          marginTop: 20,
-          padding: "10px 20px",
-          background: "#2A6EBB",
-          color: "white",
-          border: "none",
-          borderRadius: 8,
-          fontSize: 16,
-          cursor: "pointer",
-          fontWeight: "bold",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
-        }}
-        onClick={goToCheckout}
-      >
-        🌟 SORA LAB プレミアム（月額プラン）に登録する
-      </button>
     </div>
   );
 }
