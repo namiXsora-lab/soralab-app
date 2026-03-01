@@ -97,20 +97,19 @@ export default function Home() {
             </p>
 
             {/* メイン：ランニング */}
-            <button
-              className="sl-btn sl-btnPrimary"
-              onClick={goToFormCompare}
-            >
-              ランニングフォーム診断アプリへ
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <button
+                className="sl-btn sl-btnPrimary"
+                onClick={goToFormCompare}
+              >
+                ランニングフォーム診断アプリへ
+              </button>
 
-            {/* ★追加：棒高跳び */}
-            <div style={{ marginTop: 12 }}>
               <Link
-                className="sl-btn sl-btnGhost"
+                className="sl-btn sl-btnPrimary"
                 to="/polevault"
               >
-                棒高跳びフォーム診断（無料）
+                棒高跳びフォーム診断アプリへ
               </Link>
             </div>
 
