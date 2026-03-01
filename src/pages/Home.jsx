@@ -149,8 +149,6 @@ export default function Home() {
           <a className="sl-link" href="/tokushoho">特定商取引法に基づく表記</a>
           <span className="sl-dot">•</span>
           <a className="sl-link" href="/refund">返金・キャンセルについて</a>
-          <span className="sl-dot">•</span>
-          <a className="sl-link" href="/contact">お問い合わせ</a>
         </footer>
       </main>
     </div>
