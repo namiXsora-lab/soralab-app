@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { useNavigate } from "react-router-dom";
+import { fetchAuthSession, getCurrentUser } from "aws-amplify/auth";
+import { getSubscription } from "../api/subscription";
 
 // 角度を -PI..PI に正規化
 function normRad(a) {
@@ -108,6 +110,9 @@ function angleBetween(v1, v2) {
 export default function PoleVaultDiagnosis() {
   const videoRef = useRef(null);
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [sub, setSub] = useState(null);
+  const [authErr, setAuthErr] = useState("");
 
   // キャプチャ用（非表示）
   const captureCanvasRef = useRef(null);
@@ -138,6 +143,50 @@ export default function PoleVaultDiagnosis() {
 
   // 追加：キャプチャ画像のピクセルサイズを保持
   const [captureSize, setCaptureSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    (async () => {
+      try {
+        try {
+          await getCurrentUser();
+        } catch {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const session = await fetchAuthSession();
+        const idToken = session.tokens?.idToken?.toString();
+
+        if (!idToken) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        const s = await getSubscription();
+        setSub(s);
+
+      } catch (e) {
+
+        const msg = e?.message || "";
+
+        if (
+          msg.includes("Unauthorized") ||
+          msg.includes("NotAuthorized") ||
+          msg.includes("No current user") ||
+          msg.includes("Missing Authentication Token") ||
+          msg.includes("401")
+        ) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        setAuthErr("契約状況の取得に失敗しました");
+
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [navigate]);
 
   useEffect(() => {
     if (!capturedUrl || !poseLandmarks) return;
@@ -450,6 +499,24 @@ export default function PoleVaultDiagnosis() {
 
     setMsg("✅ 推定完了（次はここに描画を追加していこう）");
   };
+
+  if (loading) return <div style={{ padding: 24 }}>契約確認中...</div>;
+
+  if (authErr)
+    return <div style={{ padding: 24, color: "crimson" }}>{authErr}</div>;
+
+  if (!sub?.isSubscribed) {
+    return (
+      <div style={{ padding: 24 }}>
+        <h2>有料プランが必要です</h2>
+        <p>棒高跳びフォーム診断は有料会員向け機能です。</p>
+
+        <button onClick={() => navigate("/", { replace: true })}>
+          トップへ戻る
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
