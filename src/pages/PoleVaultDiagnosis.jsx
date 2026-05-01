@@ -765,7 +765,16 @@ export default function PoleVaultDiagnosis() {
           <div style={{ position: "relative", width: "100%", maxWidth: 720 }}>
             <img
               src={capturedUrl}
-              onLoad={() => poseLandmarks && drawPoseOnOverlay(poseLandmarks)}
+              onLoad={() => {
+                if (selectMode && candidateLandmarks.length > 0) {
+                  drawCandidatePersons(candidateLandmarks);
+                  return;
+                }
+
+                if (poseLandmarks) {
+                  drawPoseOnOverlay(poseLandmarks);
+                }
+              }}
               alt="captured"
               style={{ width: "100%", borderRadius: 12, border: "1px solid #eee", display: "block" }}
             />
