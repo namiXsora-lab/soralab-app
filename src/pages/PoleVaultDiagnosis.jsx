@@ -762,7 +762,14 @@ export default function PoleVaultDiagnosis() {
       {capturedUrl && (
         <div style={{ marginTop: 12 }}>
           <h3 style={{ marginBottom: 8 }}>キャプチャ画像</h3>
-          <div style={{ position: "relative", width: "100%", maxWidth: 720 }}>
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              maxWidth: 720,
+              lineHeight: 0,
+            }}
+          >
             <img
               src={capturedUrl}
               onLoad={() => {
@@ -783,12 +790,12 @@ export default function PoleVaultDiagnosis() {
               onClick={handleSelectPerson}
               style={{
                 position: "absolute",
-                left: 0,
-                top: 0,
+                inset: 0,
                 width: "100%",
                 height: "100%",
                 cursor: selectMode ? "crosshair" : "default",
                 borderRadius: 12,
+                pointerEvents: selectMode ? "auto" : "none",
               }}
             />
           </div>
