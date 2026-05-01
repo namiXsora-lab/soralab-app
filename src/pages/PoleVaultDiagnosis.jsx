@@ -107,6 +107,20 @@ function angleBetween(v1, v2) {
   return Math.acos(clamped) * (180 / Math.PI);
 }
 
+function getPersonCenter(landmarks, w, h) {
+  const ls = landmarks[11];
+  const rs = landmarks[12];
+  const lh = landmarks[23];
+  const rh = landmarks[24];
+
+  if (!ls || !rs || !lh || !rh) return null;
+
+  return {
+    x: ((ls.x + rs.x + lh.x + rh.x) / 4) * w,
+    y: ((ls.y + rs.y + lh.y + rh.y) / 4) * h,
+  };
+}
+
 export default function PoleVaultDiagnosis() {
   const videoRef = useRef(null);
   const navigate = useNavigate();
@@ -140,6 +154,8 @@ export default function PoleVaultDiagnosis() {
 
   // 追加：最後に推定できたランドマークを保持
   const [poseLandmarks, setPoseLandmarks] = useState(null);
+  const [candidateLandmarks, setCandidateLandmarks] = useState([]);
+  const [selectMode, setSelectMode] = useState(false);
 
   // 追加：キャプチャ画像のピクセルサイズを保持
   const [captureSize, setCaptureSize] = useState({ w: 0, h: 0 });
@@ -200,6 +216,14 @@ export default function PoleVaultDiagnosis() {
     drawPoseOnOverlay(poseLandmarks, imgCanvasW, imgCanvasH);
   }, [capturedUrl, poseLandmarks]);
 
+  useEffect(() => {
+    if (!capturedUrl) return;
+
+    if (selectMode && candidateLandmarks.length > 0) {
+      requestAnimationFrame(() => drawCandidatePersons(candidateLandmarks));
+    }
+  }, [capturedUrl, selectMode, candidateLandmarks]);
+
   // MediaPipe 初期化
   useEffect(() => {
     let cancelled = false;
@@ -219,7 +243,7 @@ export default function PoleVaultDiagnosis() {
             delegate: "GPU",
           },
           runningMode: "IMAGE",
-          numPoses: 1,
+          numPoses: 5,
         });
 
         if (!cancelled) {
@@ -259,6 +283,9 @@ export default function PoleVaultDiagnosis() {
       rightDeg: null,
     });
     setMsg(poseReady ? "キャプチャして推定できます" : "骨格推定モデルの準備中…");
+    setPoseLandmarks(null);
+    setCandidateLandmarks([]);
+    setSelectMode(false);
   };
 
   // コマ送り（secだけ移動）
@@ -411,6 +438,114 @@ export default function PoleVaultDiagnosis() {
 
   }
 
+  function drawCandidatePersons(allLandmarks) {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas || !allLandmarks?.length) return;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    allLandmarks.forEach((landmarks, index) => {
+      const center = getPersonCenter(landmarks, w, h);
+      if (!center) return;
+
+      drawMarker(ctx, center.x, center.y, String(index + 1), {
+        bg: "rgba(0,0,0,0.75)",
+      });
+    });
+  }
+
+  function handleSelectPerson(e) {
+    if (!selectMode || candidateLandmarks.length === 0) return;
+
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
+    let bestIndex = -1;
+    let bestDist = Infinity;
+
+    candidateLandmarks.forEach((landmarks, index) => {
+      const center = getPersonCenter(landmarks, w, h);
+      if (!center) return;
+
+      const dist = Math.hypot(center.x - clickX, center.y - clickY);
+
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIndex = index;
+      }
+    });
+
+    if (bestIndex === -1) {
+      setMsg("人物を選択できませんでした。もう一度タップしてください。");
+      return;
+    }
+
+    const selected = candidateLandmarks[bestIndex];
+
+    setPoseLandmarks(selected);
+    setSelectMode(false);
+    setMsg(`✅ ${bestIndex + 1}番の人物を選択しました`);
+
+    calculateAngles(selected);
+    requestAnimationFrame(() => drawPoseOnOverlay(selected));
+  }
+
+  function calculateAngles(landmarks) {
+    const ls = landmarks[11];
+    const rs = landmarks[12];
+    const le = landmarks[13];
+    const re = landmarks[14];
+    const lh = landmarks[23];
+    const rh = landmarks[24];
+
+    if (!ls || !rs || !le || !re || !lh || !rh) {
+      setMsg("角度計算に必要な点が検出できませんでした");
+      return;
+    }
+
+    const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+    const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+
+    const trunkVec = {
+      x: hipMid.x - shoulderMid.x,
+      y: hipMid.y - shoulderMid.y,
+    };
+
+    const leftArmVec = { x: le.x - ls.x, y: le.y - ls.y };
+    const rightArmVec = { x: re.x - rs.x, y: re.y - rs.y };
+
+    const leftDeg = angleBetween(trunkVec, leftArmVec);
+    const rightDeg = angleBetween(trunkVec, rightArmVec);
+
+    if (leftDeg == null || rightDeg == null) {
+      setMsg("角度計算に失敗しました");
+      return;
+    }
+
+    setAngles({
+      leftDeg,
+      rightDeg,
+    });
+  }
+
   // キャプチャ＆推定＆角度計算（ログ＋画面表示）
   const captureFrameAndEstimate = () => {
     const v = videoRef.current;
@@ -448,56 +583,64 @@ export default function PoleVaultDiagnosis() {
     setMsg("推定中…");
 
     const result = landmarker.detect(c);
-    const landmarks = result?.landmarks?.[0];
-    if (!landmarks) {
+    const allLandmarks = result?.landmarks || [];
+
+    if (allLandmarks.length === 0) {
       setMsg("骨格が検出できませんでした（人物が小さい/ブレ/画角外の可能性）");
       console.warn("No pose detected");
       return;
     }
 
-    setPoseLandmarks(landmarks);
-    requestAnimationFrame(() => drawPoseOnOverlay(landmarks));
+    setCandidateLandmarks(allLandmarks);
+    setPoseLandmarks(null);
+    setSelectMode(true);
+    setMsg("解析したい選手を画像上でタップしてください");
+
+    //requestAnimationFrame(() => drawCandidatePersons(allLandmarks));
+
+    //setPoseLandmarks(landmarks);
+    //requestAnimationFrame(() => drawPoseOnOverlay(landmarks));
 
     // 3) 必要点を取り出し
-    const ls = landmarks[11]; // left shoulder
-    const rs = landmarks[12]; // right shoulder
-    const le = landmarks[13]; // left elbow
-    const re = landmarks[14]; // right elbow
-    const lh = landmarks[23]; // left hip
-    const rh = landmarks[24]; // right hip
+    //const ls = landmarks[11]; // left shoulder
+    //const rs = landmarks[12]; // right shoulder
+    //const le = landmarks[13]; // left elbow
+    //const re = landmarks[14]; // right elbow
+    //const lh = landmarks[23]; // left hip
+    //const rh = landmarks[24]; // right hip
 
     // 肩・股関節の中点
-    const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
-    const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+    //const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+    //const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
 
     // 体幹ベクトル（肩→股関節）
-    const trunkVec = { x: hipMid.x - shoulderMid.x, y: hipMid.y - shoulderMid.y };
+    //const trunkVec = { x: hipMid.x - shoulderMid.x, y: hipMid.y - shoulderMid.y };
 
     // 上腕ベクトル（肩→肘）
-    const leftArmVec = { x: le.x - ls.x, y: le.y - ls.y };
-    const rightArmVec = { x: re.x - rs.x, y: re.y - rs.y };
+    //const leftArmVec = { x: le.x - ls.x, y: le.y - ls.y };
+    //const rightArmVec = { x: re.x - rs.x, y: re.y - rs.y };
 
     // 角度（0〜180）
-    const leftDeg = angleBetween(trunkVec, leftArmVec);
-    const rightDeg = angleBetween(trunkVec, rightArmVec);
+    //const leftDeg = angleBetween(trunkVec, leftArmVec);
+    //const rightDeg = angleBetween(trunkVec, rightArmVec);
 
-    if (leftDeg == null || rightDeg == null) {
-      setMsg("角度計算に失敗しました（点が不安定な可能性）");
-      return;
-    }
+    //if (leftDeg == null || rightDeg == null) {
+    //  setMsg("角度計算に失敗しました（点が不安定な可能性）");
+    //  return;
+    //}
 
     // ログ出し
-    console.log("pose landmarks:", landmarks);
-    console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
-    console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
+    //console.log("pose landmarks:", landmarks);
+    //console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
+    //console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
 
     // 画面表示
-    setAngles({
-      leftDeg,
-      rightDeg,
-    });
+    //setAngles({
+    //  leftDeg,
+    //  rightDeg,
+    //});
 
-    setMsg("✅ 推定完了（次はここに描画を追加していこう）");
+    //setMsg("✅ 推定完了（次はここに描画を追加していこう）");
   };
 
   if (loading) return <div style={{ padding: 24 }}>契約確認中...</div>;
@@ -628,13 +771,14 @@ export default function PoleVaultDiagnosis() {
             />
             <canvas
               ref={overlayCanvasRef}
+              onClick={handleSelectPerson}
               style={{
                 position: "absolute",
                 left: 0,
                 top: 0,
                 width: "100%",
                 height: "100%",
-                pointerEvents: "none",
+                cursor: selectMode ? "crosshair" : "default",
                 borderRadius: 12,
               }}
             />
