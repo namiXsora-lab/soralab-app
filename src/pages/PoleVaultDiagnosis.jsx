@@ -22,19 +22,16 @@ function drawAngleWedge(ctx, center, vecA, vecB, radius, label, opt = {}) {
   const a1 = Math.atan2(vecA.y, vecA.x);
   const a2 = Math.atan2(vecB.y, vecB.x);
 
-  // 「短いほうの回り」で弧を描く（0〜180°側）
   let delta = normRad(a2 - a1);
   let start = a1;
   let end = a1 + delta;
 
-  // 180°より大きくなったら逆側へ
   if (Math.abs(delta) > Math.PI) {
     delta = normRad(a1 - a2);
     start = a2;
     end = a2 + delta;
   }
 
-  // 扇形
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(center.x, center.y);
@@ -48,12 +45,10 @@ function drawAngleWedge(ctx, center, vecA, vecB, radius, label, opt = {}) {
   ctx.lineWidth = Math.max(2, Math.round(radius / 10));
   ctx.stroke();
 
-  // ラベル（扇形の中心寄り）
   const mid = (start + end) / 2;
   const tx = center.x + Math.cos(mid) * (radius + 14);
   const ty = center.y + Math.sin(mid) * (radius + 14);
 
-  // 文字の可読性：黒フチ＋白文字
   ctx.font = "bold 14px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -62,34 +57,6 @@ function drawAngleWedge(ctx, center, vecA, vecB, radius, label, opt = {}) {
   ctx.strokeText(label, tx, ty);
   ctx.fillStyle = textColor;
   ctx.fillText(label, tx, ty);
-
-  ctx.restore();
-}
-
-// ★ import の下（angleBetweenの近く）に追加
-function drawMarker(ctx, x, y, label, opt = {}) {
-  const r = opt.r ?? 14;
-
-  ctx.save();
-  ctx.globalAlpha = opt.alpha ?? 0.95;
-
-  // ●黒丸（背景）
-  ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = opt.bg ?? "rgba(0,0,0,0.70)";
-  ctx.fill();
-
-  // ○白フチ
-  ctx.lineWidth = opt.borderW ?? 3;
-  ctx.strokeStyle = opt.border ?? "rgba(255,255,255,0.95)";
-  ctx.stroke();
-
-  // 文字（白）
-  ctx.fillStyle = opt.text ?? "white";
-  ctx.font = `bold ${opt.fontSize ?? 16}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, x, y);
 
   ctx.restore();
 }
@@ -105,20 +72,6 @@ function angleBetween(v1, v2) {
   const cos = dot / (mag1 * mag2);
   const clamped = Math.min(Math.max(cos, -1), 1);
   return Math.acos(clamped) * (180 / Math.PI);
-}
-
-function getPersonCenter(landmarks, w, h) {
-  const ls = landmarks[11];
-  const rs = landmarks[12];
-  const lh = landmarks[23];
-  const rh = landmarks[24];
-
-  if (!ls || !rs || !lh || !rh) return null;
-
-  return {
-    x: ((ls.x + rs.x + lh.x + rh.x) / 4) * w,
-    y: ((ls.y + rs.y + lh.y + rh.y) / 4) * h,
-  };
 }
 
 export default function PoleVaultDiagnosis() {
@@ -142,22 +95,25 @@ export default function PoleVaultDiagnosis() {
 
   // 角度（画面にも出す）
   const [angles, setAngles] = useState({
-    leftDeg: null, // 体幹×左上腕のなす角
+    leftDeg: null,
     rightDeg: null,
   });
 
   // 画面メッセージ
   const [msg, setMsg] = useState("");
 
-  // 追加：表示用overlay（キャプチャ画像の上に重ねる）
+  // 表示用overlay（キャプチャ画像の上に重ねる）
   const overlayCanvasRef = useRef(null);
 
-  // 追加：最後に推定できたランドマークを保持
+  // 最後に推定できたランドマークを保持
   const [poseLandmarks, setPoseLandmarks] = useState(null);
-  const [candidateLandmarks, setCandidateLandmarks] = useState([]);
-  const [selectMode, setSelectMode] = useState(false);
 
-  // 追加：キャプチャ画像のピクセルサイズを保持
+  // 解析範囲指定モード
+  const [cropMode, setCropMode] = useState(false);
+  const [dragRect, setDragRect] = useState(null);
+  const dragStartRef = useRef(null);
+
+  // キャプチャ画像のピクセルサイズを保持
   const [captureSize, setCaptureSize] = useState({ w: 0, h: 0 });
 
   useEffect(() => {
@@ -180,9 +136,7 @@ export default function PoleVaultDiagnosis() {
 
         const s = await getSubscription();
         setSub(s);
-
       } catch (e) {
-
         const msg = e?.message || "";
 
         if (
@@ -197,7 +151,6 @@ export default function PoleVaultDiagnosis() {
         }
 
         setAuthErr("契約状況の取得に失敗しました");
-
       } finally {
         setLoading(false);
       }
@@ -206,23 +159,13 @@ export default function PoleVaultDiagnosis() {
 
   useEffect(() => {
     if (!capturedUrl || !poseLandmarks) return;
-
-    // 表示されているcanvasの実寸で描画し直す
-    const canvas = overlayCanvasRef.current;
-    const imgCanvasW = canvas?.clientWidth;
-    const imgCanvasH = canvas?.clientHeight;
-    if (!imgCanvasW || !imgCanvasH) return;
-
-    drawPoseOnOverlay(poseLandmarks, imgCanvasW, imgCanvasH);
+    requestAnimationFrame(() => drawPoseOnOverlay(poseLandmarks));
   }, [capturedUrl, poseLandmarks]);
 
   useEffect(() => {
-    if (!capturedUrl) return;
-
-    if (selectMode && candidateLandmarks.length > 0) {
-      requestAnimationFrame(() => drawCandidatePersons(candidateLandmarks));
-    }
-  }, [capturedUrl, selectMode, candidateLandmarks]);
+    if (!capturedUrl || !cropMode || !dragRect) return;
+    requestAnimationFrame(() => drawCropRect(dragRect));
+  }, [capturedUrl, cropMode, dragRect]);
 
   // MediaPipe 初期化
   useEffect(() => {
@@ -243,7 +186,7 @@ export default function PoleVaultDiagnosis() {
             delegate: "GPU",
           },
           runningMode: "IMAGE",
-          numPoses: 5,
+          numPoses: 1,
           minPoseDetectionConfidence: 0.2,
           minPosePresenceConfidence: 0.2,
         });
@@ -251,7 +194,7 @@ export default function PoleVaultDiagnosis() {
         if (!cancelled) {
           landmarkerRef.current = landmarker;
           setPoseReady(true);
-          setMsg("✅ 骨格推定 準備OK（キャプチャで推定します）");
+          setMsg("✅ 骨格推定 準備OK（キャプチャ後、選手を囲って推定します）");
           console.log("✅ PoseLandmarker ready");
         }
       } catch (e) {
@@ -280,14 +223,12 @@ export default function PoleVaultDiagnosis() {
 
     // 状態初期化
     setCapturedUrl(null);
-    setAngles({
-      leftDeg: null,
-      rightDeg: null,
-    });
-    setMsg(poseReady ? "キャプチャして推定できます" : "骨格推定モデルの準備中…");
+    setAngles({ leftDeg: null, rightDeg: null });
     setPoseLandmarks(null);
-    setCandidateLandmarks([]);
-    setSelectMode(false);
+    setCropMode(false);
+    setDragRect(null);
+    dragStartRef.current = null;
+    setMsg(poseReady ? "キャプチャして解析範囲を指定できます" : "骨格推定モデルの準備中…");
   };
 
   // コマ送り（secだけ移動）
@@ -301,62 +242,61 @@ export default function PoleVaultDiagnosis() {
     setCurrentTime(t);
   };
 
-  // 追加：ランドマーク配列(index)から線を引くためのペア
+  // ランドマーク配列(index)から線を引くためのペア
   const POSE_CONNECTIONS = [
-    // 顔まわり（必要なら減らしてOK）
     [0, 1], [1, 2], [2, 3], [3, 7],
     [0, 4], [4, 5], [5, 6], [6, 8],
     [9, 10],
-
-    // 体幹
-    [11, 12], // 肩
-    [11, 23], // 左肩-左股
-    [12, 24], // 右肩-右股
-    [23, 24], // 股
-
-    // 左腕
+    [11, 12],
+    [11, 23],
+    [12, 24],
+    [23, 24],
     [11, 13],
     [13, 15],
-
-    // 右腕
     [12, 14],
     [14, 16],
-
-    // 左脚
     [23, 25],
     [25, 27],
     [27, 31],
     [27, 29],
-
-    // 右脚
     [24, 26],
     [26, 28],
     [28, 32],
     [28, 30],
   ];
 
-  // 追加：overlay canvas に骨格を描く
-  // 追加：overlay canvas に骨格を描く
-  function drawPoseOnOverlay(landmarks) {
+  function setupOverlayCanvas() {
     const canvas = overlayCanvasRef.current;
-    if (!canvas || !landmarks) return;
+    if (!canvas) return null;
 
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    if (!w || !h) return;
+    if (!w || !h) return null;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
 
     const ctx = canvas.getContext("2d");
-
-    // ★① transform を完全リセット → ★② 内部解像度でクリア → ★③ CSS座標系へ
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // 主要ランドマーク（★ここで1回だけ定義）
+    return { canvas, ctx, w, h };
+  }
+
+  function clearOverlay() {
+    const setup = setupOverlayCanvas();
+    if (!setup) return;
+  }
+
+  // overlay canvas に骨格を描く
+  function drawPoseOnOverlay(landmarks) {
+    const setup = setupOverlayCanvas();
+    if (!setup || !landmarks) return;
+
+    const { ctx, w, h } = setup;
+
     const ls = landmarks[11];
     const rs = landmarks[12];
     const le = landmarks[13];
@@ -364,7 +304,6 @@ export default function PoleVaultDiagnosis() {
     const lh = landmarks[23];
     const rh = landmarks[24];
 
-    // 線
     ctx.strokeStyle = "yellow";
     ctx.globalAlpha = 0.9;
     ctx.lineWidth = Math.max(2, Math.round(w / 500));
@@ -376,7 +315,7 @@ export default function PoleVaultDiagnosis() {
 
       const va = pa.visibility ?? 1;
       const vb = pb.visibility ?? 1;
-      if (va < 0.5 || vb < 0.5) continue;
+      if (va < 0.35 || vb < 0.35) continue;
 
       ctx.beginPath();
       ctx.moveTo(pa.x * w, pa.y * h);
@@ -384,7 +323,6 @@ export default function PoleVaultDiagnosis() {
       ctx.stroke();
     }
 
-    // ===== ①② 扇形（体幹×上腕） =====
     if (ls && rs && lh && rh && le && re) {
       const LS = { x: ls.x * w, y: ls.y * h };
       const RS = { x: rs.x * w, y: rs.y * h };
@@ -410,104 +348,137 @@ export default function PoleVaultDiagnosis() {
         stroke: "rgba(76, 201, 240, 0.95)",
       });
     }
-
-    // ③④：肘の外側に逃がす（被りにくい）
-    if (ls && le) {
-      const dx = le.x - ls.x;
-      const dy = le.y - ls.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len;
-      const uy = dy / len;
-
-      const off = Math.max(18, Math.round(w / 60)); // 画面サイズで調整
-      const mx = le.x * w + ux * off;
-      const my = le.y * h + uy * off;
-
-    }
-
-    if (rs && re) {
-      const dx = re.x - rs.x;
-      const dy = re.y - rs.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const ux = dx / len;
-      const uy = dy / len;
-
-      const off = Math.max(18, Math.round(w / 60));
-      const mx = re.x * w + ux * off;
-      const my = re.y * h + uy * off;
-
-    }
-
   }
 
-  function drawCandidatePersons(allLandmarks) {
-    const canvas = overlayCanvasRef.current;
-    if (!canvas || !allLandmarks?.length) return;
+  function drawCropRect(rect) {
+    const setup = setupOverlayCanvas();
+    if (!setup || !rect) return;
 
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    if (!w || !h) return;
+    const { ctx } = setup;
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
+    ctx.save();
 
-    const ctx = canvas.getContext("2d");
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // 外側を少し暗くする
+    ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+    ctx.fillRect(0, 0, setup.w, setup.h);
+    ctx.clearRect(rect.x, rect.y, rect.w, rect.h);
 
-    allLandmarks.forEach((landmarks, index) => {
-      const center = getPersonCenter(landmarks, w, h);
-      if (!center) return;
+    // 選択範囲
+    ctx.strokeStyle = "rgba(76, 201, 240, 0.98)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
 
-      drawMarker(ctx, center.x, center.y, String(index + 1), {
-        bg: "rgba(0,0,0,0.75)",
-      });
-    });
+    ctx.fillStyle = "rgba(76, 201, 240, 0.12)";
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.fillStyle = "white";
+    const text = "この範囲を解析";
+    const tx = rect.x + 8;
+    const ty = Math.max(8, rect.y - 24);
+    ctx.strokeText(text, tx, ty);
+    ctx.fillText(text, tx, ty);
+
+    ctx.restore();
   }
 
-  function handleSelectPerson(e) {
-    if (!selectMode || candidateLandmarks.length === 0) return;
-
+  function getCanvasPointFromMouse(e) {
     const canvas = overlayCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return null;
 
     const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  }
 
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+  function getCanvasPointFromTouch(e) {
+    const canvas = overlayCanvasRef.current;
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    if (!canvas || !touch) return null;
 
-    let bestIndex = -1;
-    let bestDist = Infinity;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    };
+  }
 
-    candidateLandmarks.forEach((landmarks, index) => {
-      const center = getPersonCenter(landmarks, w, h);
-      if (!center) return;
+  function makeRect(start, end) {
+    return {
+      x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y),
+      w: Math.abs(end.x - start.x),
+      h: Math.abs(end.y - start.y),
+    };
+  }
 
-      const dist = Math.hypot(center.x - clickX, center.y - clickY);
+  function handleCropStart(point) {
+    if (!cropMode || !point) return;
 
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestIndex = index;
-      }
-    });
+    dragStartRef.current = point;
+    const rect = { x: point.x, y: point.y, w: 0, h: 0 };
+    setDragRect(rect);
+    drawCropRect(rect);
+  }
 
-    if (bestIndex === -1) {
-      setMsg("人物を選択できませんでした。もう一度タップしてください。");
+  function handleCropMove(point) {
+    if (!cropMode || !dragStartRef.current || !point) return;
+
+    const rect = makeRect(dragStartRef.current, point);
+    setDragRect(rect);
+    drawCropRect(rect);
+  }
+
+  function handleCropEnd(point) {
+    if (!cropMode || !dragStartRef.current || !point) return;
+
+    const rect = makeRect(dragStartRef.current, point);
+    dragStartRef.current = null;
+    setDragRect(rect);
+
+    if (rect.w < 40 || rect.h < 40) {
+      setMsg("範囲が小さすぎます。選手の全身を少し余裕を持って囲ってください。");
+      drawCropRect(rect);
       return;
     }
 
-    const selected = candidateLandmarks[bestIndex];
+    estimateCroppedArea(rect);
+  }
 
-    setPoseLandmarks(selected);
-    setSelectMode(false);
-    setMsg(`✅ ${bestIndex + 1}番の人物を選択しました`);
+  function handleCropMouseDown(e) {
+    handleCropStart(getCanvasPointFromMouse(e));
+  }
 
-    calculateAngles(selected);
-    requestAnimationFrame(() => drawPoseOnOverlay(selected));
+  function handleCropMouseMove(e) {
+    handleCropMove(getCanvasPointFromMouse(e));
+  }
+
+  function handleCropMouseUp(e) {
+    handleCropEnd(getCanvasPointFromMouse(e));
+  }
+
+  function handleCropTouchStart(e) {
+    if (!cropMode) return;
+    e.preventDefault();
+    handleCropStart(getCanvasPointFromTouch(e));
+  }
+
+  function handleCropTouchMove(e) {
+    if (!cropMode) return;
+    e.preventDefault();
+    handleCropMove(getCanvasPointFromTouch(e));
+  }
+
+  function handleCropTouchEnd(e) {
+    if (!cropMode) return;
+    e.preventDefault();
+    handleCropEnd(getCanvasPointFromTouch(e));
   }
 
   function calculateAngles(landmarks) {
@@ -520,7 +491,7 @@ export default function PoleVaultDiagnosis() {
 
     if (!ls || !rs || !le || !re || !lh || !rh) {
       setMsg("角度計算に必要な点が検出できませんでした");
-      return;
+      return false;
     }
 
     const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
@@ -539,33 +510,108 @@ export default function PoleVaultDiagnosis() {
 
     if (leftDeg == null || rightDeg == null) {
       setMsg("角度計算に失敗しました");
+      return false;
+    }
+
+    setAngles({ leftDeg, rightDeg });
+    return true;
+  }
+
+  function estimateCroppedArea(rect) {
+    const sourceCanvas = captureCanvasRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    const landmarker = landmarkerRef.current;
+
+    if (!sourceCanvas || !overlayCanvas || !landmarker) {
+      setMsg("解析の準備ができていません。もう一度キャプチャしてください。");
       return;
     }
 
-    setAngles({
-      leftDeg,
-      rightDeg,
-    });
+    setMsg("指定範囲を解析中…");
+
+    const displayW = overlayCanvas.clientWidth;
+    const displayH = overlayCanvas.clientHeight;
+
+    if (!displayW || !displayH) {
+      setMsg("表示サイズを取得できませんでした。もう一度キャプチャしてください。");
+      return;
+    }
+
+    const scaleX = sourceCanvas.width / displayW;
+    const scaleY = sourceCanvas.height / displayH;
+
+    // 少し余白を足して切り抜く
+    const marginRate = 0.12;
+    const mx = rect.w * marginRate;
+    const my = rect.h * marginRate;
+
+    const sx = Math.max(0, (rect.x - mx) * scaleX);
+    const sy = Math.max(0, (rect.y - my) * scaleY);
+    const ex = Math.min(sourceCanvas.width, (rect.x + rect.w + mx) * scaleX);
+    const ey = Math.min(sourceCanvas.height, (rect.y + rect.h + my) * scaleY);
+
+    const sw = Math.max(1, ex - sx);
+    const sh = Math.max(1, ey - sy);
+
+    const cropCanvas = document.createElement("canvas");
+
+    // 拡大して推定にかける
+    const targetW = 900;
+    const targetH = Math.max(300, Math.round((sh / sw) * targetW));
+
+    cropCanvas.width = targetW;
+    cropCanvas.height = targetH;
+
+    const cropCtx = cropCanvas.getContext("2d");
+    cropCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, targetW, targetH);
+
+    const result = landmarker.detect(cropCanvas);
+    const landmarks = result?.landmarks?.[0];
+
+    if (!landmarks) {
+      setMsg("指定範囲内で骨格が検出できませんでした。選手の全身を少し広めに囲ってください。");
+      drawCropRect(rect);
+      return;
+    }
+
+    // 切り抜き座標を元画像表示座標へ戻す
+    const cropDisplayX = sx / scaleX;
+    const cropDisplayY = sy / scaleY;
+    const cropDisplayW = sw / scaleX;
+    const cropDisplayH = sh / scaleY;
+
+    const mappedLandmarks = landmarks.map((p) => ({
+      ...p,
+      x: (cropDisplayX + p.x * cropDisplayW) / displayW,
+      y: (cropDisplayY + p.y * cropDisplayH) / displayH,
+    }));
+
+    setPoseLandmarks(mappedLandmarks);
+    setCropMode(false);
+    setDragRect(null);
+
+    const ok = calculateAngles(mappedLandmarks);
+    requestAnimationFrame(() => drawPoseOnOverlay(mappedLandmarks));
+
+    if (ok) {
+      setMsg("✅ 指定範囲から骨格を推定しました");
+    }
   }
 
-  // キャプチャ＆推定＆角度計算（ログ＋画面表示）
+  // キャプチャ → 解析範囲指定モードへ
   const captureFrameAndEstimate = () => {
     const v = videoRef.current;
     const c = captureCanvasRef.current;
 
     if (!v || !c) return;
 
-    // video のメタがまだなら待つ
     if (!v.videoWidth || !v.videoHeight) {
       setMsg("動画の読み込み中です。少し待ってからキャプチャしてください。");
       return;
     }
 
-    // 1) キャプチャ
     c.width = v.videoWidth;
     c.height = v.videoHeight;
-
-    // ここ（キャプチャ時にキャンバスへ描画した直後あたり）に追加
     setCaptureSize({ w: c.width, h: c.height });
 
     const ctx = c.getContext("2d");
@@ -574,81 +620,31 @@ export default function PoleVaultDiagnosis() {
     const url = c.toDataURL("image/png");
     setCapturedUrl(url);
 
-    // 2) 推定
-    const landmarker = landmarkerRef.current;
-    if (!landmarker) {
-      setMsg("骨格推定の準備中です（少し待ってください）");
-      console.warn("PoseLandmarker not ready yet");
-      return;
-    }
-
-    setMsg("推定中…");
-
-    const result = landmarker.detect(c);
-    const allLandmarks = result?.landmarks || [];
-
-    if (allLandmarks.length === 0) {
-      setMsg("骨格が検出できませんでした（人物が小さい/ブレ/画角外の可能性）");
-      console.warn("No pose detected");
-      return;
-    }
-
-    setCandidateLandmarks(allLandmarks);
+    setAngles({ leftDeg: null, rightDeg: null });
     setPoseLandmarks(null);
-    setSelectMode(true);
-    setMsg("解析したい選手を画像上でタップしてください");
+    setDragRect(null);
+    dragStartRef.current = null;
+    setCropMode(true);
 
-    //requestAnimationFrame(() => drawCandidatePersons(allLandmarks));
+    setMsg("解析したい選手の全身を、少し余裕を持って四角で囲ってください");
 
-    //setPoseLandmarks(landmarks);
-    //requestAnimationFrame(() => drawPoseOnOverlay(landmarks));
-
-    // 3) 必要点を取り出し
-    //const ls = landmarks[11]; // left shoulder
-    //const rs = landmarks[12]; // right shoulder
-    //const le = landmarks[13]; // left elbow
-    //const re = landmarks[14]; // right elbow
-    //const lh = landmarks[23]; // left hip
-    //const rh = landmarks[24]; // right hip
-
-    // 肩・股関節の中点
-    //const shoulderMid = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
-    //const hipMid = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
-
-    // 体幹ベクトル（肩→股関節）
-    //const trunkVec = { x: hipMid.x - shoulderMid.x, y: hipMid.y - shoulderMid.y };
-
-    // 上腕ベクトル（肩→肘）
-    //const leftArmVec = { x: le.x - ls.x, y: le.y - ls.y };
-    //const rightArmVec = { x: re.x - rs.x, y: re.y - rs.y };
-
-    // 角度（0〜180）
-    //const leftDeg = angleBetween(trunkVec, leftArmVec);
-    //const rightDeg = angleBetween(trunkVec, rightArmVec);
-
-    //if (leftDeg == null || rightDeg == null) {
-    //  setMsg("角度計算に失敗しました（点が不安定な可能性）");
-    //  return;
-    //}
-
-    // ログ出し
-    //console.log("pose landmarks:", landmarks);
-    //console.log("体幹×左上腕(なす角):", leftDeg.toFixed(1));
-    //console.log("体幹×右上腕(なす角):", rightDeg.toFixed(1));
-
-    // 画面表示
-    //setAngles({
-    //  leftDeg,
-    //  rightDeg,
-    //});
-
-    //setMsg("✅ 推定完了（次はここに描画を追加していこう）");
+    setTimeout(() => clearOverlay(), 0);
   };
+
+  function restartCropSelection() {
+    if (!capturedUrl) return;
+    setAngles({ leftDeg: null, rightDeg: null });
+    setPoseLandmarks(null);
+    setDragRect(null);
+    dragStartRef.current = null;
+    setCropMode(true);
+    setMsg("解析したい選手の全身を、少し余裕を持って四角で囲ってください");
+    requestAnimationFrame(() => clearOverlay());
+  }
 
   if (loading) return <div style={{ padding: 24 }}>契約確認中...</div>;
 
-  if (authErr)
-    return <div style={{ padding: 24, color: "crimson" }}>{authErr}</div>;
+  if (authErr) return <div style={{ padding: 24, color: "crimson" }}>{authErr}</div>;
 
   if (!sub?.isSubscribed) {
     return (
@@ -665,8 +661,6 @@ export default function PoleVaultDiagnosis() {
 
   return (
     <div style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
-
-      {/* ★追加：ホームへ戻る */}
       <div style={{ marginBottom: 12 }}>
         <button
           onClick={() => navigate("/")}
@@ -683,9 +677,10 @@ export default function PoleVaultDiagnosis() {
       </div>
 
       <h1 style={{ marginBottom: 6 }}>棒高跳び フォーム診断</h1>
-      <p style={{ marginTop: 0, marginBottom: 18 }}>動画をコマ送り → キャプチャ → 骨格推定</p>
+      <p style={{ marginTop: 0, marginBottom: 18 }}>
+        動画をコマ送り → キャプチャ → 選手を囲う → 骨格推定
+      </p>
 
-      {/* ステータス */}
       {msg && (
         <div
           style={{
@@ -700,15 +695,18 @@ export default function PoleVaultDiagnosis() {
         </div>
       )}
 
-      {/* アップロード */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <input type="file" accept="video/*" onChange={onFileChange} />
         <span style={{ fontSize: 12, opacity: 0.8 }}>
           骨格推定: {poseReady ? "OK" : "準備中"}
         </span>
+        {captureSize.w > 0 && (
+          <span style={{ fontSize: 12, opacity: 0.55 }}>
+            キャプチャ: {captureSize.w}×{captureSize.h}
+          </span>
+        )}
       </div>
 
-      {/* 動画プレビュー */}
       {videoUrl && (
         <div style={{ marginBottom: 12 }}>
           <video
@@ -725,7 +723,6 @@ export default function PoleVaultDiagnosis() {
         </div>
       )}
 
-      {/* コマ送り＆キャプチャ */}
       {videoUrl && (
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
           <button onClick={() => nudge(-0.1)}>◀︎ -0.10s</button>
@@ -739,15 +736,13 @@ export default function PoleVaultDiagnosis() {
           <button onClick={() => nudge(0.1)}>+0.10s ▶︎</button>
 
           <button onClick={captureFrameAndEstimate} disabled={!poseReady}>
-            この瞬間をキャプチャ（推定）
+            この瞬間をキャプチャ
           </button>
 
-          {/* キャプチャ用（非表示） */}
           <canvas ref={captureCanvasRef} style={{ display: "none" }} />
         </div>
       )}
 
-      {/* 角度表示 */}
       {(angles.leftDeg != null || angles.rightDeg != null) && (
         <div style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, maxWidth: 720, marginBottom: 12 }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>角度（キャプチャ時点）</div>
@@ -760,28 +755,38 @@ export default function PoleVaultDiagnosis() {
         </div>
       )}
 
-      {/* キャプチャ画像 */}
       {capturedUrl && (
         <div style={{ marginTop: 12 }}>
-          <h3 style={{ marginBottom: 8 }}>キャプチャ画像</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <h3 style={{ margin: 0 }}>キャプチャ画像</h3>
+            <button onClick={restartCropSelection} disabled={cropMode}>
+              解析範囲を指定し直す
+            </button>
+            {cropMode && (
+              <span style={{ fontSize: 12, opacity: 0.75 }}>
+                画像上でドラッグして選手を囲ってください
+              </span>
+            )}
+          </div>
+
           <div
             style={{
               position: "relative",
               width: "100%",
               maxWidth: 720,
               lineHeight: 0,
+              touchAction: cropMode ? "none" : "auto",
             }}
           >
             <img
               src={capturedUrl}
               onLoad={() => {
-                if (selectMode && candidateLandmarks.length > 0) {
-                  drawCandidatePersons(candidateLandmarks);
-                  return;
-                }
-
                 if (poseLandmarks) {
                   drawPoseOnOverlay(poseLandmarks);
+                } else if (dragRect) {
+                  drawCropRect(dragRect);
+                } else {
+                  clearOverlay();
                 }
               }}
               alt="captured"
@@ -789,15 +794,21 @@ export default function PoleVaultDiagnosis() {
             />
             <canvas
               ref={overlayCanvasRef}
-              onClick={handleSelectPerson}
+              onMouseDown={handleCropMouseDown}
+              onMouseMove={handleCropMouseMove}
+              onMouseUp={handleCropMouseUp}
+              onMouseLeave={handleCropMouseUp}
+              onTouchStart={handleCropTouchStart}
+              onTouchMove={handleCropTouchMove}
+              onTouchEnd={handleCropTouchEnd}
               style={{
                 position: "absolute",
                 inset: 0,
                 width: "100%",
                 height: "100%",
-                cursor: selectMode ? "crosshair" : "default",
+                cursor: cropMode ? "crosshair" : "default",
                 borderRadius: 12,
-                pointerEvents: selectMode ? "auto" : "none",
+                pointerEvents: cropMode ? "auto" : "none",
               }}
             />
           </div>
